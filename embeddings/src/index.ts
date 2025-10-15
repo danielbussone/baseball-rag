@@ -1,9 +1,8 @@
-// Baseball Player Embedding Generation System
-// Generates natural language summaries and embeddings for player seasons
-
 import { pipeline } from '@xenova/transformers';
 import pkg from 'pg';
 const { Pool } = pkg;
+import { fileURLToPath } from 'url';
+import { resolve } from 'path';
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -21,43 +20,28 @@ interface SeasonStats {
   // Basic stats
   g: number;
   pa: number;
-  ab: number;
-  h: number;
   hr: number;
   sb: number;
-  
-  // Rate stats
-  avg: number;
-  obp: number;
-  slg: number;
-  ops: number;
-  
-  // Advanced stats
   war: number;
   wrc_plus: number;
   
-  // Plus stats (era-adjusted)
-  avg_plus?: number;
-  bb_pct_plus?: number;
-  k_pct_plus?: number;
-  iso_plus?: number;
-  obp_plus?: number;
-  slg_plus?: number;
-  
-  // Plate discipline
-  bb_pct: number;
-  k_pct: number;
-  
   // Fielding
   fielding: number | null;
-  positional: number;
   
   // Statcast (2015+)
-  ev?: number;
   ev90?: number;
-  hardhit_pct?: number;
-  hard_pct_plus?: number;
-  barrel_pct?: number;
+  
+  // Pre-calculated grades (from R ETL)
+  overall_grade: number;
+  offense_grade: number;
+  power_grade: number;
+  hit_grade: number;
+  discipline_grade: number;
+  contact_grade: number;
+  speed_grade: number;
+  fielding_grade: number | null;
+  hard_contact_grade?: number;
+  exit_velo_grade?: number;
 }
 
 interface PlayerGrades {
@@ -89,7 +73,7 @@ interface EmbeddingRecord {
 // GRADING CONSTANTS
 // ============================================================================
 
-const GRADE_DESCRIPTORS = {
+const GRADE_DESCRIPTORS: Record<number, string> = {
   80: "elite",
   70: "exceptional",
   60: "plus",
@@ -101,7 +85,7 @@ const GRADE_DESCRIPTORS = {
   20: "extremely poor"
 } as const;
 
-const GRADE_DESCRIPTORS_VERBOSE = {
+const GRADE_DESCRIPTORS_VERBOSE: Record<number, string> = {
   80: "generational, elite, otherworldly, best in baseball",
   70: "exceptional, plus-plus, excellent, fantastic",
   60: "strong, plus, very good",
@@ -113,7 +97,7 @@ const GRADE_DESCRIPTORS_VERBOSE = {
   20: "extremely poor, unplayable, terrible"
 } as const;
 
-const FIELDING_DESCRIPTORS = {
+const FIELDING_DESCRIPTORS: Record<number, string> = {
   80: "all-time great defender, defensive wizard",
   70: "Gold Glove caliber defender",
   60: "one of the better defenders at his position",
@@ -126,170 +110,36 @@ const FIELDING_DESCRIPTORS = {
 } as const;
 
 // ============================================================================
-// GRADING FUNCTIONS
-// ============================================================================
-
-// WAR grading (revised thresholds)
-function gradeWAR(war: number): number {
-  if (war >= 9.0) return 80;
-  if (war >= 7.0) return 70;
-  if (war >= 5.0) return 60;
-  if (war >= 3.0) return 55;
-  if (war >= 2.0) return 50;
-  if (war >= 1.0) return 45;
-  if (war >= -0.3) return 40;
-  if (war >= -1.0) return 30;
-  return 20;
-}
-
-// Generic plus stat grading (100 = league average)
-function gradePlusStat(plusStat: number): number {
-  if (plusStat >= 180) return 80;
-  if (plusStat >= 160) return 70;
-  if (plusStat >= 140) return 60;
-  if (plusStat >= 120) return 55;
-  if (plusStat >= 90) return 50;
-  if (plusStat >= 80) return 45;
-  if (plusStat >= 70) return 40;
-  if (plusStat >= 60) return 30;
-  return 20;
-}
-
-// Speed grading (SB per 600 PA)
-function gradeSpeed(sb: number, pa: number): number {
-  const sbPer600 = (sb / pa) * 600;
-  if (sbPer600 >= 50) return 80;
-  if (sbPer600 >= 40) return 70;
-  if (sbPer600 >= 30) return 60;
-  if (sbPer600 >= 25) return 55;
-  if (sbPer600 >= 15) return 50;
-  if (sbPer600 >= 10) return 45;
-  if (sbPer600 >= 5) return 40;
-  if (sbPer600 >= 2) return 30;
-  return 20;
-}
-
-// EV90 grading
-function gradeEV90(ev90: number): number {
-  if (ev90 >= 112.0) return 80;
-  if (ev90 >= 110.0) return 70;
-  if (ev90 >= 108.0) return 60;
-  if (ev90 >= 107.0) return 55;
-  if (ev90 >= 105.0) return 50;
-  if (ev90 >= 103.0) return 45;
-  if (ev90 >= 101.0) return 40;
-  if (ev90 >= 99.0) return 30;
-  return 20;
-}
-
-// Fielding grading (era-adjusted)
-interface FieldingEra {
-  startYear: number;
-  endYear: number;
-  catcher: { grade80: number; grade50: number; grade20: number };
-  other: { grade80: number; grade50: number; grade20: number };
-}
-
-const FIELDING_ERAS: FieldingEra[] = [
-  {
-    startYear: 1988,
-    endYear: 2001,
-    catcher: { grade80: 15, grade50: 0, grade20: -15 },
-    other: { grade80: 20, grade50: 0, grade20: -20 }
-  },
-  {
-    startYear: 2002,
-    endYear: 2015,
-    catcher: { grade80: 30, grade50: 0, grade20: -30 },
-    other: { grade80: 15, grade50: 0, grade20: -15 }
-  },
-  {
-    startYear: 2016,
-    endYear: 2030,
-    catcher: { grade80: 30, grade50: 0, grade20: -30 },
-    other: { grade80: 15, grade50: 0, grade20: -15 }
-  }
-];
-
-function getFieldingEra(year: number): FieldingEra {
-  return FIELDING_ERAS.find(
-    era => year >= era.startYear && year <= era.endYear
-  ) || FIELDING_ERAS[2];
-}
-
-function isCatcher(position: string): boolean {
-  return position === 'C' || position.startsWith('C/') || position.includes('/C');
-}
-
-function gradeFielding(
-  fielding: number | null,
-  year: number,
-  position: string
-): number | null {
-  if (fielding === null) return null;
-  
-  const era = getFieldingEra(year);
-  const isCatch = isCatcher(position);
-  const thresholds = isCatch ? era.catcher : era.other;
-  
-  const { grade80, grade50, grade20 } = thresholds;
-  
-  if (fielding >= grade80) return 80;
-  if (fielding >= grade50) {
-    const pct = (fielding - grade50) / (grade80 - grade50);
-    return 50 + (pct * 30);
-  }
-  if (fielding >= grade20) {
-    const pct = (fielding - grade20) / (grade50 - grade20);
-    return 20 + (pct * 30);
-  }
-  return 20;
-}
-
-// Round grade to nearest standard grade
-function roundToGrade(grade: number): 20 | 30 | 40 | 45 | 50 | 55 | 60 | 70 | 80 {
-  if (grade >= 75) return 80;
-  if (grade >= 65) return 70;
-  if (grade >= 57.5) return 60;
-  if (grade >= 52.5) return 55;
-  if (grade >= 47.5) return 50;
-  if (grade >= 42.5) return 45;
-  if (grade >= 35) return 40;
-  if (grade >= 25) return 30;
-  return 20;
-}
-
-// ============================================================================
 // POSITION HELPERS
 // ============================================================================
 
 function getPositionDescription(position: string): string {
   const posMap: Record<string, string> = {
-    'C': 'catcher',
-    'SS': 'shortstop',
-    'CF': 'center field',
-    '2B': 'second base',
-    '3B': 'third base',
-    'RF': 'right field',
-    'LF': 'left field',
-    '1B': 'first base',
-    'DH': 'designated hitter',
-    'SS/2B': 'middle infielder',
-    '2B/SS': 'middle infielder',
-    'SS/2B/CF': 'up the middle defender',
-    'CF/SS/2B': 'up the middle defender',
-    '1B/3B': 'corner infielder',
-    '3B/1B': 'corner infielder',
-    '1B/2B/3B/SS': 'utility infielder',
-    '2B/3B/SS/1B': 'utility infielder',
-    '1B/3B/OF': 'corner player',
-    '3B/1B/OF': 'corner player',
-    '1B/OF': 'corner player',
-    'OF/1B': 'corner player',
-    '2B/3B/OF': 'utility player',
-    '3B/2B/OF': 'utility player',
-    'OF': 'outfielder',
-    'IF': 'infielder',
+    'C': 'at catcher',
+    'SS': 'at shortstop',
+    'CF': 'in center field',
+    '2B': 'at second base',
+    '3B': 'at third base',
+    'RF': 'in right field',
+    'LF': 'in left field',
+    '1B': 'at first base',
+    'DH': 'as a designated hitter',
+    'SS/2B': 'as a middle infielder',
+    '2B/SS': 'as a middle infielder',
+    'SS/2B/CF': 'as an up the middle defender',
+    'CF/SS/2B': 'as an up the middle defender',
+    '1B/3B': 'as a corner infielder',
+    '3B/1B': 'as a corner infielder',
+    '1B/2B/3B/SS': 'as a utility infielder',
+    '2B/3B/SS/1B': 'as a utility infielder',
+    '1B/3B/OF': 'as a corner guy',
+    '3B/1B/OF': 'as a corner guy',
+    '1B/OF': 'as a corner guy',
+    'OF/1B': 'as a corner guy',
+    '2B/3B/OF': 'as a utility player',
+    '3B/2B/OF': 'as a utility player',
+    'OF': 'as an outfielder',
+    'IF': 'as an infielder',
   };
   
   return posMap[position] || position.toLowerCase();
@@ -309,52 +159,65 @@ function getFieldingDescription(
     return "did not field (DH)";
   }
   
-  const roundedGrade = roundToGrade(grade);
   const posDesc = getPositionDescription(position);
   
-  if (roundedGrade >= 80) {
-    return `all-time great defender at ${posDesc} (+${fieldingRuns.toFixed(1)} runs)`;
-  } else if (roundedGrade >= 70) {
-    return `Gold Glove caliber at ${posDesc} (+${fieldingRuns.toFixed(1)} runs)`;
-  } else if (roundedGrade >= 60) {
-    return `one of the better defenders at ${posDesc} (+${fieldingRuns.toFixed(1)} runs)`;
-  } else if (roundedGrade >= 55) {
-    return `above average defender at ${posDesc} (+${fieldingRuns.toFixed(1)} runs)`;
-  } else if (roundedGrade >= 50) {
-    return `solid defender at ${posDesc}`;
-  } else if (roundedGrade >= 45) {
-    return `adequate at ${posDesc}`;
-  } else if (roundedGrade >= 40) {
-    return `below average defender at ${posDesc} (${fieldingRuns.toFixed(1)} runs)`;
-  } else if (roundedGrade >= 30) {
-    return `defensive liability at ${posDesc} (${fieldingRuns.toFixed(1)} runs)`;
+  if (grade >= 80) {
+    return `all-time great defender ${posDesc} (+${fieldingRuns} outs above average)`;
+  } else if (grade >= 70) {
+    return `Gold Glove caliber ${posDesc} (+${fieldingRuns} outs above average)`;
+  } else if (grade >= 60) {
+    return `one of the better defenders ${posDesc} (+${fieldingRuns} outs above average)`;
+  } else if (grade >= 55) {
+    return `slightly above average defender ${posDesc} (+${fieldingRuns} outs above average)`;
+  } else if (grade >= 50) {
+    return `solid defender ${posDesc} (${fieldingRuns} outs above average)`;
+  } else if (grade >= 45) {
+    return `fringy defender ${posDesc} (${fieldingRuns} outs above average)`;
+  } else if (grade >= 40) {
+    return `below average defender ${posDesc} (${fieldingRuns} outs above average)`;
+  } else if (grade >= 30) {
+    return `defensive liability ${posDesc} (${fieldingRuns} outs above average)`;
   } else {
-    return `extremely poor defender at ${posDesc} (${fieldingRuns.toFixed(1)} runs)`;
+    return `extremely poor, borderline unplayable defender ${posDesc} (${fieldingRuns} outs above average)`;
   }
 }
 
 // ============================================================================
-// GRADING SYSTEM
+// wRC+ HELPER
 // ============================================================================
 
-function gradePlayer(season: SeasonStats): PlayerGrades {
-  const fieldingGrade = season.fielding !== null
-    ? gradeFielding(season.fielding, season.year, season.position)
-    : null;
-  
+function getWRCPlusDescription(wrc_plus: number, wrc_plus_grade: number): string {
+  const wrcDesc = GRADE_DESCRIPTORS[wrc_plus_grade];
+  if(wrc_plus > 100) {
+    const pct_above_avg = wrc_plus - 100;
+     return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_above_avg}% better than league average).`
+  } else if(wrc_plus === 100) {
+    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or exactly league average).`
+  } else {
+    const pct_bellow_avg = 100 - wrc_plus;
+    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_bellow_avg}% worse than league average).`
+  };
+
+}
+
+// ============================================================================
+// PLAYER GRADE EXTRACTION (from pre-calculated grades)
+// ============================================================================
+
+function getPlayerGrades(season: SeasonStats): PlayerGrades {
   return {
-    overall: gradeWAR(season.war),
-    overallOffense: gradePlusStat(season.wrc_plus),
-    power: season.iso_plus ? gradePlusStat(season.iso_plus) : 50,
-    hit: season.avg_plus ? gradePlusStat(season.avg_plus) : 50,
-    discipline: season.bb_pct_plus ? gradePlusStat(season.bb_pct_plus) : 50,
-    contact: season.k_pct_plus ? gradePlusStat(season.k_pct_plus) : 50,
-    speed: gradeSpeed(season.sb, season.pa),
-    fielding: fieldingGrade,
+    overall: season.overall_grade,
+    overallOffense: season.offense_grade,
+    power: season.power_grade,
+    hit: season.hit_grade,
+    discipline: season.discipline_grade,
+    contact: season.contact_grade,
+    speed: season.speed_grade,
+    fielding: season.fielding_grade,
     position: season.position || 'DH',
     isPremiumPosition: isPremiumDefensivePosition(season.position || ''),
-    hardContact: season.hard_pct_plus ? gradePlusStat(season.hard_pct_plus) : undefined,
-    exitVelo: season.ev90 ? gradeEV90(season.ev90) : undefined
+    hardContact: season.hard_contact_grade,
+    exitVelo: season.exit_velo_grade
   };
 }
 
@@ -367,26 +230,23 @@ function capitalize(str: string): string {
 }
 
 function generateSeasonSummary(season: SeasonStats): string {
-  const grades = gradePlayer(season);
+  const grades = getPlayerGrades(season);
   const parts: string[] = [];
   
-  // Header with position
-  const posDesc = getPositionDescription(grades.position);
   parts.push(
     `${season.player_name}, ${season.year} season ` +
-    `(age ${season.age}, ${posDesc}, ${season.team}):`
+    `(age ${season.age}, ${grades.position}, ${season.team}):`
   );
   
   // Overall performance
-  const overallDesc = GRADE_DESCRIPTORS_VERBOSE[roundToGrade(grades.overall)];
-  parts.push(`${capitalize(overallDesc)} performance with ${season.war.toFixed(1)} WAR.`);
+  const overallDesc = GRADE_DESCRIPTORS[grades.overall];
+  parts.push(`${capitalize(overallDesc)} performance with ${season.war} WAR.`);
   
   // Offensive production
   if (season.wrc_plus) {
-    const wrcGrade = roundToGrade(grades.overallOffense);
-    const wrcDesc = GRADE_DESCRIPTORS[wrcGrade];
+    const wrcDesc = getWRCPlusDescription(season.wrc_plus, grades.overallOffense);
     parts.push(
-      `Posted ${wrcDesc} offensive production (${season.wrc_plus} wRC+).`
+      wrcDesc
     );
   }
   
@@ -394,27 +254,27 @@ function generateSeasonSummary(season: SeasonStats): string {
   const tools: string[] = [];
   
   if (grades.power >= 60) {
-    const powerDesc = GRADE_DESCRIPTORS[roundToGrade(grades.power)];
+    const powerDesc = GRADE_DESCRIPTORS[grades.power];
     tools.push(`${powerDesc} power`);
   }
   
   if (grades.hit >= 60) {
-    const hitDesc = GRADE_DESCRIPTORS[roundToGrade(grades.hit)];
+    const hitDesc = GRADE_DESCRIPTORS[grades.hit];
     tools.push(`${hitDesc} hit tool`);
   }
   
   if (grades.discipline >= 60) {
-    const discDesc = GRADE_DESCRIPTORS[roundToGrade(grades.discipline)];
+    const discDesc = GRADE_DESCRIPTORS[grades.discipline];
     tools.push(`${discDesc} plate discipline`);
   }
   
   if (grades.contact >= 60) {
-    const contactDesc = GRADE_DESCRIPTORS[roundToGrade(grades.contact)];
+    const contactDesc = GRADE_DESCRIPTORS[grades.contact];
     tools.push(`${contactDesc} contact ability`);
   }
   
   if (grades.speed >= 60) {
-    const speedDesc = GRADE_DESCRIPTORS[roundToGrade(grades.speed)];
+    const speedDesc = GRADE_DESCRIPTORS[grades.speed];
     tools.push(`${speedDesc} speed (${season.sb} SB)`);
   }
   
@@ -424,7 +284,7 @@ function generateSeasonSummary(season: SeasonStats): string {
   
   // Fielding - mention if notable or premium position
   if (grades.fielding !== null) {
-    const fieldingGrade = roundToGrade(grades.fielding);
+    const fieldingGrade = grades.fielding;
     const shouldMentionDefense =
       fieldingGrade >= 60 ||
       fieldingGrade <= 40 ||
@@ -442,9 +302,9 @@ function generateSeasonSummary(season: SeasonStats): string {
   
   // Statcast (modern only, 55+ grade)
   if (grades.exitVelo && grades.exitVelo >= 55) {
-    const evDesc = GRADE_DESCRIPTORS[roundToGrade(grades.exitVelo)];
+    const evDesc = GRADE_DESCRIPTORS[grades.exitVelo];
     parts.push(
-      `${capitalize(evDesc)} bat speed with ${season.ev90!.toFixed(1)} mph 90th percentile exit velocity.`
+      `${capitalize(evDesc)} bat speed with ${season.ev90} mph 90th percentile exit velocity.`
     );
   }
   
@@ -460,7 +320,7 @@ const pool = new Pool({
   port: 5432,
   database: 'postgres',
   user: 'postgres',
-  password: 'yourpassword'  // CHANGE THIS
+  password: 'KenGriffeyJr.24PG'
 });
 
 async function ensureEmbeddingTableExists() {
@@ -551,31 +411,22 @@ async function fetchSeasons(limit?: number): Promise<SeasonStats[]> {
       s.position,
       s.g,
       s.pa,
-      s.ab,
-      s.h,
       s.hr,
       s.sb,
-      s.avg,
-      s.obp,
-      s.slg,
-      s.ops,
       s.war,
       s.wrc_plus,
-      s.avg_plus,
-      s.bb_pct_plus,
-      s.k_pct_plus,
-      s.iso_plus,
-      s.obp_plus,
-      s.slg_plus,
-      s.bb_pct,
-      s.k_pct,
       s.fielding,
-      s.positional,
-      s.ev,
       s.ev90,
-      s.hardhit_pct,
-      s.hard_pct_plus,
-      s.barrel_pct
+      s.overall_grade,
+      s.offense_grade,
+      s.power_grade,
+      s.hit_grade,
+      s.discipline_grade,
+      s.contact_grade,
+      s.speed_grade,
+      s.fielding_grade,
+      s.hard_contact_grade,
+      s.exit_velo_grade
     FROM fg_season_stats s
     JOIN fg_players p ON s.fangraphs_id = p.fangraphs_id
     WHERE s.pa >= 50
@@ -657,7 +508,7 @@ async function generateAllEmbeddings(batchSize: number = 100) {
     
     // Prepare records
     const records: EmbeddingRecord[] = batch.map((season, idx) => {
-      const grades = gradePlayer(season);
+      const grades = getPlayerGrades(season);
       
       return {
         player_season_id: season.player_season_id,
@@ -671,9 +522,9 @@ async function generateAllEmbeddings(batchSize: number = 100) {
           wrc_plus: season.wrc_plus,
           position: season.position,
           age: season.age,
-          overall_grade: roundToGrade(grades.overall),
-          power_grade: roundToGrade(grades.power),
-          hit_grade: roundToGrade(grades.hit)
+          overall_grade: grades.overall,
+          power_grade: grades.power,
+          hit_grade: grades.hit
         }
       };
     });
@@ -739,13 +590,17 @@ async function main() {
       await initializeEmbedder();
       await testSimilaritySearch(query);
     } else if (command === 'sample') {
-      // Generate sample summary
-      const seasons = await fetchSeasons(1);
+      // Generate sample summaries
+      console.log('Generate sample summaries')
+      const seasons = await fetchSeasons(100);
       if (seasons.length > 0) {
-        const summary = generateSeasonSummary(seasons[0]);
-        console.log('\nSample Summary:\n');
-        console.log(summary);
-        console.log('\n');
+        console.log('\nSample Summaries:\n');
+        seasons.forEach((season, idx) => {
+          const summary = generateSeasonSummary(season);
+          console.log(`${idx + 1}. ${summary}\n`);
+        });
+      } else {
+        console.log('No seasons found')
       }
     } else {
       console.log(`
@@ -770,8 +625,11 @@ Examples:
 }
 
 // Run if called directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+const currentFile = fileURLToPath(import.meta.url);
+const calledFile = resolve(process.argv[1]);
+
+if (currentFile === calledFile) {
   main();
 }
 
-export { generateSeasonSummary, gradePlayer, generateEmbedding };
+export { generateSeasonSummary, getPlayerGrades, generateEmbedding };
