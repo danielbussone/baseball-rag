@@ -249,19 +249,19 @@ upsert_table <- function(con, table_name, data, conflict_columns) {
 }
 
 # Upsert players table
-cat("Upserting players table...\n")
+cat("\nUpserting players table...\n\n")
 rows_affected <- upsert_table(con, "fg_players", players, c("fangraphs_id"))
-cat(sprintf("✓ Upserted %d players\n", rows_affected))
+cat(sprintf("\n\n✓ Upserted %d players\n", rows_affected))
 
 # Upsert season stats table
-cat("Upserting season_stats table...\n")
+cat("\nUpserting season_stats table...\n\n")
 rows_affected <- upsert_table(con, "fg_season_stats", season_stats, c("player_season_id"))
-cat(sprintf("✓ Upserted %d season records\n", rows_affected))
+cat(sprintf("\n\n✓ Upserted %d season records\n", rows_affected))
 
 # Upsert pitch data table
-cat("Upserting pitch_data table...\n")
+cat("\nUpserting pitch_data table...\n\n")
 rows_affected <- upsert_table(con, "fg_batter_pitches_faced", pitch_data, c("player_season_id"))
-cat(sprintf("✓ Upserted %d pitch data records\n", rows_affected))
+cat(sprintf("\n\n✓ Upserted %d pitch data records\n", rows_affected))
 
 # ============================================================================
 # VERIFICATION QUERIES

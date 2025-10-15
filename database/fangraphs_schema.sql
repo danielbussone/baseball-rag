@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     year INTEGER NOT NULL,
     age INTEGER,
     team VARCHAR(10),
+    position VARCHAR(50),         -- Position(s) played
     
     -- Basic counting stats
     g INTEGER,              -- Games
@@ -71,6 +72,15 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     k_pct NUMERIC(5,2),     -- Strikeout Rate
     bb_k NUMERIC(5,3),      -- Walk to Strikeout Ratio
     
+    -- Plus stats (era-adjusted, 100 = league average)
+    avg_plus INTEGER,       -- Batting Average Plus
+    bb_pct_plus INTEGER,    -- Walk Rate Plus
+    k_pct_plus INTEGER,     -- Strikeout Rate Plus
+    obp_plus INTEGER,       -- OBP Plus
+    slg_plus INTEGER,       -- Slugging Plus
+    iso_plus INTEGER,       -- Isolated Power Plus
+    babip_plus INTEGER,     -- BABIP Plus
+    
     -- Batted ball metrics
     gb_pct NUMERIC(5,2),    -- Ground Ball %
     fb_pct NUMERIC(5,2),    -- Fly Ball %
@@ -85,7 +95,7 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     hard_pct NUMERIC(5,2),  -- Hard Contact %
     
     -- Weighted stats
-    woba NUMERIC(4,3),      -- Weighted On-Base Average
+    woba NUMERIC(5,3),      -- Weighted On-Base Average
     wraa NUMERIC(6,1),      -- Weighted Runs Above Average
     wrc INTEGER,            -- Weighted Runs Created
     wrc_plus INTEGER,       -- Weighted Runs Created Plus (park/league adjusted)
@@ -113,12 +123,14 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     
     -- Statcast metrics (available 2015+)
     ev NUMERIC(5,1),        -- Average Exit Velocity
+    ev90 NUMERIC(5,1),      -- 90th Percentile Exit Velocity
     la NUMERIC(5,1),        -- Average Launch Angle
     barrels INTEGER,        -- Barrel Count
     barrel_pct NUMERIC(5,2), -- Barrel %
     maxev NUMERIC(5,1),     -- Max Exit Velocity
     hardhit INTEGER,        -- Hard Hit Count
     hardhit_pct NUMERIC(5,2), -- Hard Hit %
+    hard_pct_plus INTEGER,  -- Hard Hit % Plus (era-adjusted)
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
@@ -126,9 +138,15 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
 );
 
 COMMENT ON TABLE fg_season_stats IS 'Per-season batting statistics from FanGraphs';
+COMMENT ON COLUMN fg_season_stats.position IS 'Position(s) played - may be multi-position like SS/2B or 1B/3B/OF';
 COMMENT ON COLUMN fg_season_stats.wrc_plus IS '100 is league average, >100 is above average';
 COMMENT ON COLUMN fg_season_stats.war IS 'Wins Above Replacement (FanGraphs calculation)';
-
+COMMENT ON COLUMN fg_season_stats.avg_plus IS 'Era-adjusted batting average, 100 = league average';
+COMMENT ON COLUMN fg_season_stats.bb_pct_plus IS 'Era-adjusted walk rate, 100 = league average';
+COMMENT ON COLUMN fg_season_stats.k_pct_plus IS 'Era-adjusted strikeout rate, 100 = league average (higher is better)';
+COMMENT ON COLUMN fg_season_stats.iso_plus IS 'Era-adjusted isolated power, 100 = league average';
+COMMENT ON COLUMN fg_season_stats.ev90 IS '90th percentile exit velocity (better indicator than average EV)';
+COMMENT ON COLUMN fg_season_stats.hard_pct_plus IS 'Era-adjusted hard contact rate, 100 = league average';
 
 -- ============================================================================
 -- BATTER PITCH DATA TABLE
@@ -351,10 +369,52 @@ CREATE INDEX IF NOT EXISTS idx_fg_season_stats_war ON fg_season_stats(war DESC);
 CREATE INDEX IF NOT EXISTS idx_fg_season_stats_player_year ON fg_season_stats(fangraphs_id, year);
 CREATE INDEX IF NOT EXISTS idx_fg_season_stats_team ON fg_season_stats(team);
 CREATE INDEX IF NOT EXISTS idx_fg_season_stats_wrc_plus ON fg_season_stats(wrc_plus DESC);
+CREATE INDEX IF NOT EXISTS idx_fg_season_stats_position ON fg_season_stats(position);
 
 -- Pitch data indexes
 CREATE INDEX IF NOT EXISTS idx_fg_pitch_data_player ON fg_batter_pitches_faced(fangraphs_id);
 CREATE INDEX IF NOT EXISTS idx_fg_pitch_data_year ON fg_batter_pitches_faced(year);
+
+-- ============================================================================
+-- PLAYER EMBEDDINGS TABLE
+-- ============================================================================
+-- Vector embeddings for semantic search of player seasons
+
+CREATE TABLE IF NOT EXISTS player_embeddings (
+    id SERIAL PRIMARY KEY,
+    player_season_id VARCHAR(50) NOT NULL,
+    fangraphs_id INTEGER NOT NULL REFERENCES fg_players(fangraphs_id) ON DELETE CASCADE,
+    year INTEGER NOT NULL,
+    
+    embedding_type VARCHAR(50) NOT NULL, -- 'season_summary', 'career_summary', 'pitch_profile'
+    summary_text TEXT NOT NULL,          -- The actual text that was embedded
+    embedding vector(768),               -- The embedding itself (768 dimensions for all-mpnet-base-v2)
+    
+    metadata JSONB,                      -- Store key stats for filtering
+    -- e.g., {"war": 8.3, "wrc_plus": 179, "position": "CF", "overall_grade": 70}
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    UNIQUE(player_season_id, embedding_type)
+);
+
+COMMENT ON TABLE player_embeddings IS 'Vector embeddings of player season summaries for semantic search';
+COMMENT ON COLUMN player_embeddings.embedding_type IS 'Type of summary: season_summary, career_summary, or pitch_profile';
+COMMENT ON COLUMN player_embeddings.summary_text IS 'Natural language description that was embedded';
+COMMENT ON COLUMN player_embeddings.embedding IS '768-dimensional vector from all-mpnet-base-v2 model';
+COMMENT ON COLUMN player_embeddings.metadata IS 'JSONB with grades and key stats for hybrid filtering';
+
+-- Indexes for player_embeddings
+CREATE INDEX IF NOT EXISTS idx_player_embeddings_vector 
+    ON player_embeddings USING hnsw (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_player_embeddings_type 
+    ON player_embeddings(embedding_type);
+CREATE INDEX IF NOT EXISTS idx_player_embeddings_player 
+    ON player_embeddings(fangraphs_id);
+CREATE INDEX IF NOT EXISTS idx_player_embeddings_year 
+    ON player_embeddings(year);
+CREATE INDEX IF NOT EXISTS idx_player_embeddings_metadata 
+    ON player_embeddings USING gin(metadata);
 
 -- ============================================================================
 -- USEFUL VIEWS
@@ -412,7 +472,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply trigger to players table
-CREATE TRIGGER update_fg_players_updated_at 
+CREATE trigger IF NOT EXISTS update_fg_players_updated_at 
     BEFORE UPDATE ON fg_players
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
@@ -428,9 +488,9 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 INSERT INTO schema_version (version, description) 
-VALUES ('1.0', 'Initial FanGraphs schema with players, season stats, and pitch data')
+VALUES ('1.1', 'Added position field, plus stats (era-adjusted), EV90, hard_pct_plus, and player_embeddings table')
 ON CONFLICT (version) DO NOTHING;
 
 COMMENT ON TABLE schema_version IS 'Tracks database schema versions';
 
--- Done! Schema version 1.0 created successfully
+-- Done! Schema version 1.1 created successfully
