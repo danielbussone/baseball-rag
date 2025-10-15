@@ -189,6 +189,298 @@ season_stats <- fg_data %>%
 cat(sprintf("Season stats records: %d\n", nrow(season_stats)))
 
 # ============================================================================
+# GRADE CALCULATION (20-80 Scouting Scale)
+# ============================================================================
+
+cat("\nCalculating player grades (20-80 scale)...\n")
+
+# Generic Helper function for plus stat grading (100 = average)
+grade_plus_stat <- function(plus_stat) {
+  case_when(
+    is.na(plus_stat) ~ NA_integer_,
+    plus_stat >= 180 ~ 80L,
+    plus_stat >= 160 ~ 70L,
+    plus_stat >= 130 ~ 60L,
+    plus_stat >= 110 ~ 55L,
+    plus_stat >= 90 ~ 50L,
+    plus_stat >= 50 ~ 45L,
+    plus_stat >= 30 ~ 40L,
+    plus_stat >= 10 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade WAR
+grade_war <- function(war) {
+  case_when(
+    is.na(war) ~ NA_integer_,
+    war >= 8.0 ~ 80L,
+    war >= 6.0 ~ 70L,
+    war >= 3.5 ~ 60L,
+    war >= 2.0 ~ 55L,
+    war >= 0.5 ~ 50L,
+    war >= 0 ~ 45L,
+    war >= -1 ~ 40L,
+    war >= -1.5 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade Offense
+grade_offense <- function(wrc_plus) {
+  case_when(
+    is.na(wrc_plus) ~ NA_integer_,
+    wrc_plus >= 170 ~ 80L,
+    wrc_plus >= 150 ~ 70L,
+    wrc_plus >= 125 ~ 60L,
+    wrc_plus >= 110 ~ 55L,
+    wrc_plus >= 90 ~ 50L,
+    wrc_plus >= 50 ~ 45L,
+    wrc_plus >= 30 ~ 40L,
+    wrc_plus >= 10 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade Hit Tool
+grade_hit <- function(avg_plus) {
+  case_when(
+    is.na(avg_plus) ~ NA_integer_,
+    avg_plus >= 120 ~ 80L,
+    avg_plus >= 115 ~ 70L,
+    avg_plus >= 110 ~ 60L,
+    avg_plus >= 105 ~ 55L,
+    avg_plus >= 95 ~ 50L,
+    avg_plus >= 90 ~ 45L,
+    avg_plus >= 70 ~ 40L,
+    avg_plus >= 50 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade Contact Tool
+grade_contact <- function(k_pct_plus) {
+  case_when(
+    is.na(k_pct_plus) ~ NA_integer_,
+    k_pct_plus >= 200 ~ 80L,
+    k_pct_plus >= 180 ~ 70L,
+    k_pct_plus >= 150 ~ 60L,
+    k_pct_plus >= 125 ~ 55L,
+    k_pct_plus >= 90 ~ 50L,
+    k_pct_plus >= 75 ~ 45L,
+    k_pct_plus >= 50 ~ 40L,
+    k_pct_plus >= 40 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade speed (SB per 600 PA)
+grade_speed <- function(sb, pa) {
+  sb_per_600 <- (sb / pa) * 600
+  case_when(
+    is.na(sb) | is.na(pa) | pa == 0 ~ NA_integer_,
+    sb_per_600 >= 55 ~ 80L,
+    sb_per_600 >= 40 ~ 70L,
+    sb_per_600 >= 25 ~ 60L,
+    sb_per_600 >= 20 ~ 55L,
+    sb_per_600 >= 15 ~ 50L,
+    sb_per_600 >= 10 ~ 45L,
+    sb_per_600 >= 5 ~ 40L,
+    sb_per_600 >= 2 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+# Grade EV90
+grade_ev90 <- function(ev90) {
+  case_when(
+    is.na(ev90) ~ NA_integer_,
+    ev90 >= 112.0 ~ 80L,
+    ev90 >= 110.0 ~ 70L,
+    ev90 >= 108.0 ~ 60L,
+    ev90 >= 107.0 ~ 55L,
+    ev90 >= 105.0 ~ 50L,
+    ev90 >= 103.0 ~ 45L,
+    ev90 >= 101.0 ~ 40L,
+    ev90 >= 99.0 ~ 30L,
+    TRUE ~ 20L
+  )
+}
+
+grade_fielding <- function(fielding, position, year) {
+  # The case_when() function evaluates the conditions in order
+  # and returns the result for the first condition that is TRUE.
+  case_when(
+    is.na(fielding) ~ NA_integer_, # If fielding is NULL, return empty
+    
+    # Catcher criteria
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding >= 15 ~ 80L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding >= 10 ~ 70L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding >= 5 ~ 60L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding > -1 ~ 50L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding > -10 ~ 40L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding > -15 ~ 30L,
+    grepl("C", position, ignore.case = TRUE) & year <= 2001 & fielding < -15 ~ 20L,
+    
+    # Catcher criteria (post-2001)
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding >= 30 ~ 80L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding >= 20 ~ 70L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding >= 10 ~ 60L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding > -1 ~ 50L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding > -20 ~ 40L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding > -30 ~ 30L,
+    grepl("C", position, ignore.case = TRUE) & year > 2001 & fielding < -30 ~ 20L,
+    
+    # Fielder criteria (pre-2002)
+    year <= 2001 & fielding >= 20 ~ 80L,
+    year <= 2001 & fielding >= 15 ~ 70L,
+    year <= 2001 & fielding >= 10 ~ 60L,
+    year <= 2001 & fielding > -1 ~ 50L,
+    year <= 2001 & fielding > -15 ~ 40L,
+    year <= 2001 & fielding > -20 ~ 30L,
+    year <= 2001 & fielding < -20 ~ 20L,
+    
+    # Fielder criteria (post-2001)
+    year > 2001 & fielding >= 15 ~ 80L,
+    year > 2001 & fielding >= 10 ~ 70L,
+    year > 2001 & fielding >= 5 ~ 60L,
+    year > 2001 & fielding > -1 ~ 50L,
+    year > 2001 & fielding > -10 ~ 40L,
+    year > 2001 & fielding > -15 ~ 30L,
+    year > 2001 & fielding < -15 ~ 20L,
+    
+    # Fallback for any unmatched case
+    TRUE ~ NA_integer_
+  )
+}
+
+
+# Grade fielding (era-adjusted by position)
+grade_fielding_foo <- function(fielding, year, position) {
+  # Define thresholds by era
+  if (year <= 2001) {
+    catcher_80 <- 15
+    catcher_50 <- 0
+    catcher_20 <- -15
+    other_80 <- 20
+    other_50 <- 0
+    other_20 <- -20
+  } else if (year <= 2015) {
+    catcher_80 <- 30
+    catcher_50 <- 0
+    catcher_20 <- -30
+    other_80 <- 15
+    other_50 <- 0
+    other_20 <- -15
+  } else {
+    catcher_80 <- 30
+    catcher_50 <- 0
+    catcher_20 <- -30
+    other_80 <- 15
+    other_50 <- 0
+    other_20 <- -15
+  }
+  
+  # Use catcher thresholds if position includes 'C'
+  is_catcher <- grepl("^C$|^C/|/C", position)
+  
+  g80 <- if_else(is_catcher, catcher_80, other_80)
+  g50 <- if_else(is_catcher, catcher_50, other_50)
+  g20 <- if_else(is_catcher, catcher_20, other_20)
+  
+  # Calculate grade
+  case_when(
+    fielding >= g80 ~ 80L,
+    fielding >= g50 ~ as.integer(50 + ((fielding - g50) / (g80 - g50)) * 30),
+    fielding >= g20 ~ as.integer(20 + ((fielding - g20) / (g50 - g20)) * 30),
+    TRUE ~ 20L
+  )
+}
+
+# Apply grades to season_stats
+season_stats <- season_stats %>%
+  mutate(
+    overall_grade = grade_war(war),
+    offense_grade = grade_offense(wrc_plus),
+    power_grade = grade_plus_stat(iso_plus),
+    hit_grade = grade_hit(avg_plus),
+    discipline_grade = grade_plus_stat(bb_pct_plus),
+    contact_grade = grade_contact(k_pct_plus),
+    speed_grade = grade_speed(sb, pa),
+    fielding_grade = grade_fielding(fielding, year, position),
+    hard_contact_grade = grade_plus_stat(hard_pct_plus),
+    exit_velo_grade = grade_ev90(ev90)
+  )
+
+cat("✓ Grades calculated\n")
+
+# ============================================================================
+# GRADE DISTRIBUTION VALIDATION
+# ============================================================================
+
+cat("\n=== GRADE DISTRIBUTION VALIDATION ===\n")
+cat("Expected: 50 = average (50th %ile), 60 = +1 SD (84th %ile), 70 = +2 SD (97th %ile), 80 = +3 SD (99th %ile)\n\n")
+
+# Function to show grade distribution
+show_grade_distribution <- function(grades, grade_name) {
+  grade_dist <- table(grades, useNA = "ifany")
+  grade_pct <- prop.table(grade_dist) * 100
+  
+  cat(sprintf("%s Grade Distribution:\n", grade_name))
+  print(round(grade_pct, 1))
+  
+  # Calculate percentiles for key grades
+  non_na_grades <- grades[!is.na(grades)]
+  if (length(non_na_grades) > 0) {
+    pct_60_plus <- mean(non_na_grades >= 60) * 100
+    pct_70_plus <- mean(non_na_grades >= 70) * 100
+    pct_80 <- mean(non_na_grades >= 80) * 100
+    
+    cat(sprintf("  60+ grade: %.1f%% (expect ~16%%)\n", pct_60_plus))
+    cat(sprintf("  70+ grade: %.1f%% (expect ~3%%)\n", pct_70_plus))
+    cat(sprintf("  80 grade:  %.1f%% (expect ~1%%)\n\n", pct_80))
+  }
+}
+
+# Validate distributions
+show_grade_distribution(season_stats$overall_grade, "Overall (WAR)")
+show_grade_distribution(season_stats$offense_grade, "Offense (wRC+)")
+show_grade_distribution(season_stats$power_grade, "Power (ISO+)")
+show_grade_distribution(season_stats$hit_grade, "Hit Tool (AVG+)")
+show_grade_distribution(season_stats$discipline_grade, "Plate Discipline (BB%+)")
+show_grade_distribution(season_stats$contact_grade, "Contact Tool (K%+)")
+show_grade_distribution(season_stats$speed_grade, "Speed (SB)")
+
+catcher_season_stats <- season_stats %>% filter(grepl("C", position, ignore.case = TRUE))
+fielder_season_stats <- season_stats %>% filter(!grepl("C", position, ignore.case = TRUE))
+
+show_grade_distribution(catcher_season_stats$fielding_grade, "Catcher Fielding")
+show_grade_distribution(fielder_season_stats$fielding_grade, "Fielder Fielding")
+show_grade_distribution(season_stats$hard_contact_grade, "Hard Contact (Hard%+)")
+show_grade_distribution(season_stats$exit_velo_grade, "Exit Velo (EV90)")
+
+# Show some example elite seasons
+cat("\n=== EXAMPLE 80-GRADE OVERALL SEASONS ===\n")
+elite_seasons <- season_stats %>%
+  filter(overall_grade == 80) %>%
+  select(year, fangraphs_id, war, overall_grade) %>%
+  head(10)
+
+if (nrow(elite_seasons) > 0) {
+  # Get player names
+  elite_with_names <- elite_seasons %>%
+    left_join(players %>% select(fangraphs_id, player_name), by = "fangraphs_id") %>%
+    select(player_name, year, war, overall_grade) %>%
+    arrange(desc(war))
+  
+  print(elite_with_names)
+} else {
+  cat("No 80-grade seasons found\n")
+}
+
+cat("\n")
+
+# ============================================================================
 # CREATE PITCH DATA TABLE (OPTIONAL - SEPARATE NORMALIZED TABLE)
 # ============================================================================
 
@@ -217,7 +509,7 @@ upsert_table <- function(con, table_name, data, conflict_columns) {
   temp_table <- paste0("temp_", table_name)
   
   # Write to temporary table
-  dbWriteTable(con, temp_table, data, temporary = TRUE, overwrite = TRUE, row.names = FALSE)
+  dbWriteTable(con, temp_table, data, temporary = FALSE, overwrite = TRUE, row.names = FALSE)
   
   # Get all column names except conflict columns
   all_cols <- names(data)
@@ -249,19 +541,19 @@ upsert_table <- function(con, table_name, data, conflict_columns) {
 }
 
 # Upsert players table
-cat("\nUpserting players table...\n\n")
+cat("\nUpserting players table...\n")
 rows_affected <- upsert_table(con, "fg_players", players, c("fangraphs_id"))
-cat(sprintf("\n\n✓ Upserted %d players\n", rows_affected))
+cat(sprintf("\n✓ Upserted %d players\n", rows_affected))
 
 # Upsert season stats table
-cat("\nUpserting season_stats table...\n\n")
+cat("\nUpserting season_stats table...\n")
 rows_affected <- upsert_table(con, "fg_season_stats", season_stats, c("player_season_id"))
-cat(sprintf("\n\n✓ Upserted %d season records\n", rows_affected))
+cat(sprintf("\n✓ Upserted %d season records\n", rows_affected))
 
 # Upsert pitch data table
-cat("\nUpserting pitch_data table...\n\n")
+cat("\nUpserting pitch_data table...\n")
 rows_affected <- upsert_table(con, "fg_batter_pitches_faced", pitch_data, c("player_season_id"))
-cat(sprintf("\n\n✓ Upserted %d pitch data records\n", rows_affected))
+cat(sprintf("\n✓ Upserted %d pitch data records\n", rows_affected))
 
 # ============================================================================
 # VERIFICATION QUERIES

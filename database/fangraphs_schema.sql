@@ -72,15 +72,6 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     k_pct NUMERIC(5,2),     -- Strikeout Rate
     bb_k NUMERIC(5,3),      -- Walk to Strikeout Ratio
     
-    -- Plus stats (era-adjusted, 100 = league average)
-    avg_plus INTEGER,       -- Batting Average Plus
-    bb_pct_plus INTEGER,    -- Walk Rate Plus
-    k_pct_plus INTEGER,     -- Strikeout Rate Plus
-    obp_plus INTEGER,       -- OBP Plus
-    slg_plus INTEGER,       -- Slugging Plus
-    iso_plus INTEGER,       -- Isolated Power Plus
-    babip_plus INTEGER,     -- BABIP Plus
-    
     -- Batted ball metrics
     gb_pct NUMERIC(5,2),    -- Ground Ball %
     fb_pct NUMERIC(5,2),    -- Fly Ball %
@@ -121,6 +112,15 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     f_strike_pct NUMERIC(5,2),  -- First Pitch Strike %
     swstr_pct NUMERIC(5,2),     -- Swinging Strike %
     
+    -- Plus stats (era-adjusted, 100 = league average)
+    avg_plus INTEGER,       -- Batting Average Plus
+    bb_pct_plus INTEGER,    -- Walk Rate Plus
+    k_pct_plus INTEGER,     -- Strikeout Rate Plus
+    obp_plus INTEGER,       -- OBP Plus
+    slg_plus INTEGER,       -- Slugging Plus
+    iso_plus INTEGER,       -- Isolated Power Plus
+    babip_plus INTEGER,     -- BABIP Plus
+    
     -- Statcast metrics (available 2015+)
     ev NUMERIC(5,1),        -- Average Exit Velocity
     ev90 NUMERIC(5,1),      -- 90th Percentile Exit Velocity
@@ -133,6 +133,18 @@ CREATE TABLE IF NOT EXISTS fg_season_stats (
     hard_pct_plus INTEGER,  -- Hard Hit % Plus (era-adjusted)
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Player Grades (20-80 scouting scale, calculated during ETL)
+    overall_grade INTEGER,      -- WAR-based overall grade
+    offense_grade INTEGER,      -- wRC+ based offensive grade
+    power_grade INTEGER,        -- ISO+ based power grade
+    hit_grade INTEGER,          -- AVG+ based hit tool grade
+    discipline_grade INTEGER,   -- BB%+ based plate discipline grade
+    contact_grade INTEGER,      -- K%+ based contact ability grade
+    speed_grade INTEGER,        -- SB/600PA based speed grade
+    fielding_grade INTEGER,     -- Era-adjusted fielding grade
+    hard_contact_grade INTEGER, -- Hard Hit%+ grade (2015+)
+    exit_velo_grade INTEGER,    -- EV90 grade (2015+)
     
     UNIQUE(fangraphs_id, year, team)
 );
@@ -471,11 +483,18 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+
 -- Apply trigger to players table
-CREATE trigger IF NOT EXISTS update_fg_players_updated_at 
+DO
+$$BEGIN
+   CREATE TRIGGER update_fg_players_updated_at 
     BEFORE UPDATE ON fg_players
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
+EXCEPTION
+   WHEN duplicate_object THEN
+      NULL;
+END;$$;
 
 -- ============================================================================
 -- SCHEMA VERSION TRACKING
