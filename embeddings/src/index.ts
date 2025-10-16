@@ -162,23 +162,23 @@ function getFieldingDescription(
   const posDesc = getPositionDescription(position);
   
   if (grade >= 80) {
-    return `all-time great defender ${posDesc} (+${fieldingRuns} outs above average)`;
+    return `all-time great defender ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 70) {
-    return `Gold Glove caliber ${posDesc} (+${fieldingRuns} outs above average)`;
+    return `Gold Glove caliber ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 60) {
-    return `one of the better defenders ${posDesc} (+${fieldingRuns} outs above average)`;
+    return `one of the better defenders ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 55) {
-    return `slightly above average defender ${posDesc} (+${fieldingRuns} outs above average)`;
+    return `slightly above average defender ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 50) {
-    return `solid defender ${posDesc} (${fieldingRuns} outs above average)`;
+    return `solid defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 45) {
-    return `fringy defender ${posDesc} (${fieldingRuns} outs above average)`;
+    return `fringy defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 40) {
-    return `below average defender ${posDesc} (${fieldingRuns} outs above average)`;
+    return `below average defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
   } else if (grade >= 30) {
-    return `defensive liability ${posDesc} (${fieldingRuns} outs above average)`;
+    return `defensive liability ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
   } else {
-    return `extremely poor, borderline unplayable defender ${posDesc} (${fieldingRuns} outs above average)`;
+    return `extremely poor, borderline unplayable defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
   }
 }
 
@@ -190,14 +190,13 @@ function getWRCPlusDescription(wrc_plus: number, wrc_plus_grade: number): string
   const wrcDesc = GRADE_DESCRIPTORS[wrc_plus_grade];
   if(wrc_plus > 100) {
     const pct_above_avg = wrc_plus - 100;
-     return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_above_avg}% better than league average).`
+    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_above_avg}% better than league average).`
   } else if(wrc_plus === 100) {
     return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or exactly league average).`
   } else {
-    const pct_bellow_avg = 100 - wrc_plus;
-    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_bellow_avg}% worse than league average).`
-  };
-
+    const pct_below_avg = 100 - wrc_plus;
+    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_below_avg}% worse than league average).`
+  }
 }
 
 // ============================================================================
@@ -240,14 +239,12 @@ function generateSeasonSummary(season: SeasonStats): string {
   
   // Overall performance
   const overallDesc = GRADE_DESCRIPTORS[grades.overall];
-  parts.push(`${capitalize(overallDesc)} performance with ${season.war} WAR.`);
+  parts.push(`${capitalize(overallDesc)} performance with ${season.war.toFixed(1)} WAR.`);
   
   // Offensive production
   if (season.wrc_plus) {
     const wrcDesc = getWRCPlusDescription(season.wrc_plus, grades.overallOffense);
-    parts.push(
-      wrcDesc
-    );
+    parts.push(wrcDesc);
   }
   
   // Offensive tools (60+ grade)
@@ -304,7 +301,7 @@ function generateSeasonSummary(season: SeasonStats): string {
   if (grades.exitVelo && grades.exitVelo >= 55) {
     const evDesc = GRADE_DESCRIPTORS[grades.exitVelo];
     parts.push(
-      `${capitalize(evDesc)} bat speed with ${season.ev90} mph 90th percentile exit velocity.`
+      `${capitalize(evDesc)} bat speed with ${season.ev90!.toFixed(1)} mph 90th percentile exit velocity.`
     );
   }
   
@@ -320,7 +317,7 @@ const pool = new Pool({
   port: 5432,
   database: 'postgres',
   user: 'postgres',
-  password: 'KenGriffeyJr.24PG'
+  password: 'KenGriffeyJr.24PG'  // CHANGE THIS
 });
 
 async function ensureEmbeddingTableExists() {
@@ -543,6 +540,139 @@ async function generateAllEmbeddings(batchSize: number = 100) {
 // TESTING / DEMO
 // ============================================================================
 
+interface SearchFilters {
+  position?: string;
+  minWAR?: number;
+  maxWAR?: number;
+  minOverallGrade?: number;
+  maxOverallGrade?: number;
+  minPowerGrade?: number;
+  maxPowerGrade?: number;
+  minFieldingGrade?: number;
+  maxFieldingGrade?: number;
+  yearRange?: [number, number];
+}
+
+async function hybridSearch(
+  queryText: string,
+  filters: SearchFilters = {},
+  limit: number = 10
+) {
+  console.log(`\nHybrid Search for: "${queryText}"`);
+  if (Object.keys(filters).length > 0) {
+    console.log(`Filters: ${JSON.stringify(filters, null, 2)}`);
+  }
+  console.log();
+  
+  // Generate query embedding
+  const queryEmbedding = await generateEmbedding(queryText);
+  
+  // Build WHERE clause from filters
+  const whereClauses: string[] = ["embedding_type = 'season_summary'"];
+  const params: any[] = [JSON.stringify(queryEmbedding), limit];
+  let paramIndex = 3;
+  
+  if (filters.position) {
+    whereClauses.push(`s.position ILIKE \$${paramIndex}`);
+    params.push(`%${filters.position}%`)
+    paramIndex++;
+  }
+  
+  if (filters.minWAR !== undefined) {
+    whereClauses.push(`s.war >= \$${paramIndex}`);
+    params.push(filters.minWAR)
+    paramIndex++;
+  }
+  
+  if (filters.maxWAR !== undefined) {
+    whereClauses.push(`s.war <= \$${paramIndex}`);
+    params.push(filters.maxWAR)
+    paramIndex++;
+  }
+  
+  if (filters.minOverallGrade !== undefined) {
+    whereClauses.push(`s.overall_grade >= \$${paramIndex}`);
+    params.push(filters.minOverallGrade)
+    paramIndex++;
+  }
+  
+  if (filters.maxOverallGrade !== undefined) {
+    whereClauses.push(`s.overall_grade <= \$${paramIndex}`);
+    params.push(filters.maxOverallGrade)
+    paramIndex++;
+  }
+  
+  if (filters.minPowerGrade !== undefined) {
+    whereClauses.push(`s.power_grade >= \$${paramIndex}`);
+    params.push(filters.minPowerGrade)
+    paramIndex++;
+  }
+  
+  if (filters.maxPowerGrade !== undefined) {
+    whereClauses.push(`s.power_grade <= \$${paramIndex}`);
+    params.push(filters.maxPowerGrade)
+    paramIndex++;
+  }
+  
+  if (filters.minFieldingGrade !== undefined) {
+    whereClauses.push(`s.fielding_grade >= \$${paramIndex}`);
+    params.push(filters.minFieldingGrade)
+    paramIndex++;
+  }
+  
+  if (filters.maxFieldingGrade !== undefined) {
+    whereClauses.push(`s.fielding_grade <= \$${paramIndex}`);
+    params.push(filters.maxFieldingGrade)
+    paramIndex++;
+  }
+  
+  if (filters.yearRange) {
+    whereClauses.push(`year BETWEEN \$${paramIndex} AND \$${paramIndex + 1}`);
+    params.push(filters.yearRange[0], filters.yearRange[1])
+    paramIndex++;
+  }
+  
+  const whereClause = whereClauses.join(' AND ');
+
+  console.log(`WHERE: ${whereClause}`)
+  
+  const query = `
+    SELECT 
+      e.summary_text,
+      s.year,
+      p.player_name,
+      s.position,
+      s.war,
+      s.wrc_plus,
+      s.overall_grade,
+      s.power_grade,
+      s.hit_grade,
+      s.fielding_grade,
+      s.speed_grade,
+      1 - (e.embedding <=> $1::vector) AS similarity
+    FROM player_embeddings e
+    JOIN fg_season_stats s ON e.player_season_id = s.player_season_id
+    JOIN fg_players p ON s.fangraphs_id = p.fangraphs_id
+    WHERE ${whereClause}
+    ORDER BY embedding <=> $1::vector
+    LIMIT $2
+  `;
+  
+  const result = await pool.query(query, params);
+  
+  if (result.rows.length === 0) {
+    console.log('No results found with the given filters. Try relaxing your constraints.\n');
+    return;
+  }
+  
+  console.log('Top results:\n');
+  result.rows.forEach((row, idx) => {
+    console.log(`${idx + 1}. (${(row.similarity * 100).toFixed(1)}% match)`);
+    console.log(`   WAR: ${row.war} | Position: ${row.position} | Grades: Overall=${row.overall_grade}, Power=${row.power_grade}, Hit=${row.hit_grade}`);
+    console.log(`   ${row.summary_text}\n`);
+  });
+}
+
 async function testSimilaritySearch(queryText: string, limit: number = 10) {
   console.log(`\nSearching for: "${queryText}"\n`);
   
@@ -589,6 +719,45 @@ async function main() {
       const query = args.slice(1).join(' ') || 'elite power hitter with great plate discipline';
       await initializeEmbedder();
       await testSimilaritySearch(query);
+    } else if (command === 'hybrid') {
+      // Parse hybrid search arguments
+      // Format: npm start hybrid "query text" --position=1B --minWAR=3 --maxFieldingGrade=40
+      const query = args[1] || 'power hitter';
+      const filters: SearchFilters = {};
+      
+      for (let i = 2; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.startsWith('--')) {
+          const [key, value] = arg.substring(2).split('=');
+          
+          if (key === 'position') {
+            filters.position = value;
+          } else if (key === 'minWAR') {
+            filters.minWAR = parseFloat(value);
+          } else if (key === 'maxWAR') {
+            filters.maxWAR = parseFloat(value);
+          } else if (key === 'minOverallGrade') {
+            filters.minOverallGrade = parseInt(value);
+          } else if (key === 'maxOverallGrade') {
+            filters.maxOverallGrade = parseInt(value);
+          } else if (key === 'minPowerGrade') {
+            filters.minPowerGrade = parseInt(value);
+          } else if (key === 'maxPowerGrade') {
+            filters.maxPowerGrade = parseInt(value);
+          } else if (key === 'minFieldingGrade') {
+            filters.minFieldingGrade = parseInt(value);
+          } else if (key === 'maxFieldingGrade') {
+            filters.maxFieldingGrade = parseInt(value);
+          } else if (key === 'yearStart' || key === 'yearEnd') {
+            if (!filters.yearRange) filters.yearRange = [1988, 2025];
+            if (key === 'yearStart') filters.yearRange[0] = parseInt(value);
+            if (key === 'yearEnd') filters.yearRange[1] = parseInt(value);
+          }
+        }
+      }
+      
+      await initializeEmbedder();
+      await hybridSearch(query, filters);
     } else if (command === 'sample') {
       // Generate sample summaries
       console.log('Generate sample summaries')
@@ -607,13 +776,31 @@ async function main() {
 Baseball Player Embedding Generation System
 
 Usage:
-  npm start generate [batchSize]  - Generate embeddings for all seasons
-  npm start test [query]           - Test similarity search
-  npm start sample                 - Show sample summary
+  npm start generate [batchSize]                    - Generate embeddings for all seasons
+  npm start test [query]                             - Test basic similarity search
+  npm start hybrid "query" [--filters]               - Hybrid search with filters
+  npm start sample                                   - Show sample summaries
+
+Hybrid Search Filters:
+  --position=POS           Position (1B, 2B, SS, 3B, C, OF, DH)
+  --minWAR=X               Minimum WAR
+  --maxWAR=X               Maximum WAR
+  --minOverallGrade=X      Minimum overall grade (20-80 scale)
+  --maxOverallGrade=X      Maximum overall grade
+  --minPowerGrade=X        Minimum power grade
+  --maxPowerGrade=X        Maximum power grade
+  --minFieldingGrade=X     Minimum fielding grade
+  --maxFieldingGrade=X     Maximum fielding grade (use for poor defense)
+  --yearStart=YYYY         Start year
+  --yearEnd=YYYY           End year
 
 Examples:
   npm start generate 100
   npm start test "elite power hitter with great defense"
+  npm start hybrid "power hitter" --position=1B --maxFieldingGrade=40
+  npm start hybrid "slugging first baseman with poor defense" --position=1B --minPowerGrade=60 --maxFieldingGrade=40
+  npm start hybrid "elite shortstop defender" --position=SS --minFieldingGrade=70
+  npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --minFieldingGrade=60
   npm start sample
       `);
     }
