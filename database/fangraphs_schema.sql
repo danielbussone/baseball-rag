@@ -451,7 +451,27 @@ SELECT
     ROUND(AVG(s.war)::numeric, 1) as avg_war,
     ROUND(AVG(s.wrc_plus)::numeric, 0) as avg_wrc_plus,
     MAX(s.war) as peak_war,
-    (SELECT year FROM fg_season_stats WHERE fangraphs_id = p.fangraphs_id ORDER BY war DESC LIMIT 1) as peak_year
+    (SELECT year FROM fg_season_stats WHERE fangraphs_id = p.fangraphs_id ORDER BY war DESC LIMIT 1) as peak_year,
+    (
+        SELECT ROUND(SUM(war), 1)
+        FROM (
+            SELECT war 
+            FROM fg_season_stats 
+            WHERE fangraphs_id = p.fangraphs_id
+            ORDER BY war DESC
+            LIMIT 7
+        ) peak_seasons
+    ) as peak_7yr_war,
+    ROUND((ROUND(SUM(s.war)::numeric, 1) + (
+        SELECT SUM(war)
+        FROM (
+            SELECT war 
+            FROM fg_season_stats 
+            WHERE fangraphs_id = p.fangraphs_id
+            ORDER BY war DESC
+            LIMIT 7
+        ) peak
+    )) / 2, 1) as jaws
 FROM fg_players p
 JOIN fg_season_stats s ON p.fangraphs_id = s.fangraphs_id
 GROUP BY p.fangraphs_id, p.player_name, p.bats, p.first_season, p.last_season;
