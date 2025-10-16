@@ -527,9 +527,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 
 INSERT INTO schema_version (version, description) 
-VALUES ('1.1', 'Added position field, plus stats (era-adjusted), EV90, hard_pct_plus, and player_embeddings table')
+VALUES ('1.3', 'Added 7 year peak and JAWS to fangraphs career stats view')
 ON CONFLICT (version) DO NOTHING;
 
 COMMENT ON TABLE schema_version IS 'Tracks database schema versions';
-
--- Done! Schema version 1.1 created successfully

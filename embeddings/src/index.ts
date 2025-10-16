@@ -24,6 +24,12 @@ interface SeasonStats {
   sb: number;
   war: number;
   wrc_plus: number;
+
+  // Triple slash
+  avg: number;
+  obp: number;
+  slg: number;
+  ops: number;
   
   // Fielding
   fielding: number | null;
@@ -142,7 +148,7 @@ function getPositionDescription(position: string): string {
     'IF': 'as an infielder',
   };
   
-  return posMap[position] || position.toLowerCase();
+  return posMap[position] || `at ${position}`;
 }
 
 function isPremiumDefensivePosition(position: string): boolean {
@@ -156,29 +162,29 @@ function getFieldingDescription(
   fieldingRuns: number
 ): string {
   if (grade === null) {
-    return "did not field (DH)";
+    return "Did not field (DH)";
   }
   
   const posDesc = getPositionDescription(position);
   
   if (grade >= 80) {
-    return `all-time great defender ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
+    return `All-time great defender ${posDesc} (+${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 70) {
-    return `Gold Glove caliber ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Gold Glove caliber ${posDesc} (+${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 60) {
-    return `one of the better defenders ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
+    return `One of the better defenders ${posDesc} (+${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 55) {
-    return `slightly above average defender ${posDesc} (+${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Slightly above average defender ${posDesc} (+${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 50) {
-    return `solid defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Solid defender ${posDesc} (${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 45) {
-    return `fringy defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Fringy defender ${posDesc} (${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 40) {
-    return `below average defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Below average defender ${posDesc} (${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else if (grade >= 30) {
-    return `defensive liability ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Defensive liability ${posDesc} (${Number(fieldingRuns).toFixed(1)} outs above average)`;
   } else {
-    return `extremely poor, borderline unplayable defender ${posDesc} (${fieldingRuns.toFixed(1)} outs above average)`;
+    return `Extremely poor, borderline unplayable defender ${posDesc} (${Number(fieldingRuns).toFixed(1)} outs above average)`;
   }
 }
 
@@ -186,16 +192,42 @@ function getFieldingDescription(
 // wRC+ HELPER
 // ============================================================================
 
-function getWRCPlusDescription(wrc_plus: number, wrc_plus_grade: number): string {
+function getWARDescription(war: number, war_grade: number): string {
+  if (war_grade >= 80) {
+    return `All-time great season with ${war} WAR`;
+  } else if (war_grade >= 70) {
+    return `MVP worthy season with ${war} WAR`;
+  } else if (war_grade >= 60) {
+    return `All star caliber season with ${war} WAR`;
+  } else if (war_grade >= 55) {
+    return `An above average campaign with ${war} WAR`;
+  } else if (war_grade >= 50) {
+    return `Average contribution with ${war} WAR`;
+  } else if (war_grade >= 45) {
+    return `A replacement level season with ${war} WAR`;
+  } else if (war_grade >= 40) {
+    return `A negative season with ${war} WAR`;
+  } else if (war_grade >= 30) {
+    return `A very bad season with ${war} WAR`;
+  } else {
+    return `Disaster of a season with ${war} WAR`;
+  }
+}
+
+// ============================================================================
+// wRC+ HELPER
+// ============================================================================
+
+function getWRCPlusDescription(ops: number, wrc_plus: number, wrc_plus_grade: number): string {
   const wrcDesc = GRADE_DESCRIPTORS[wrc_plus_grade];
   if(wrc_plus > 100) {
     const pct_above_avg = wrc_plus - 100;
-    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_above_avg}% better than league average).`
+    return `Posted ${wrcDesc} offensive production with a ${ops} OPS (${wrc_plus} wRC+ or ${pct_above_avg}% better than league average).`
   } else if(wrc_plus === 100) {
-    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or exactly league average).`
+    return `Posted ${wrcDesc} offensive production with a ${ops} OPS (${wrc_plus} wRC+ or exactly league average).`
   } else {
     const pct_below_avg = 100 - wrc_plus;
-    return `Posted ${wrcDesc} offensive production (${wrc_plus} wRC+ or ${pct_below_avg}% worse than league average).`
+    return `Posted ${wrcDesc} offensive production with a ${ops} OPS (${wrc_plus} wRC+ or ${pct_below_avg}% worse than league average).`
   }
 }
 
@@ -238,12 +270,12 @@ function generateSeasonSummary(season: SeasonStats): string {
   );
   
   // Overall performance
-  const overallDesc = GRADE_DESCRIPTORS[grades.overall];
-  parts.push(`${capitalize(overallDesc)} performance with ${season.war.toFixed(1)} WAR.`);
+  const overallDesc = getWARDescription(season.war, season.overall_grade);
+  parts.push(overallDesc);
   
   // Offensive production
   if (season.wrc_plus) {
-    const wrcDesc = getWRCPlusDescription(season.wrc_plus, grades.overallOffense);
+    const wrcDesc = getWRCPlusDescription(season.ops, season.wrc_plus, grades.overallOffense);
     parts.push(wrcDesc);
   }
   
@@ -252,17 +284,17 @@ function generateSeasonSummary(season: SeasonStats): string {
   
   if (grades.power >= 60) {
     const powerDesc = GRADE_DESCRIPTORS[grades.power];
-    tools.push(`${powerDesc} power`);
+    tools.push(`${powerDesc} power with ${season.hr} home runs and a ${season.slg} slugging percentage`);
   }
   
   if (grades.hit >= 60) {
     const hitDesc = GRADE_DESCRIPTORS[grades.hit];
-    tools.push(`${hitDesc} hit tool`);
+    tools.push(`${hitDesc} hitting with a ${season.avg} batting average`);
   }
   
   if (grades.discipline >= 60) {
     const discDesc = GRADE_DESCRIPTORS[grades.discipline];
-    tools.push(`${discDesc} plate discipline`);
+    tools.push(`${discDesc} plate discipline with a ${season.obp} on base percentage`);
   }
   
   if (grades.contact >= 60) {
@@ -272,7 +304,7 @@ function generateSeasonSummary(season: SeasonStats): string {
   
   if (grades.speed >= 60) {
     const speedDesc = GRADE_DESCRIPTORS[grades.speed];
-    tools.push(`${speedDesc} speed (${season.sb} SB)`);
+    tools.push(`${speedDesc} speed with ${season.sb} stolen bases`);
   }
   
   if (tools.length > 0) {
@@ -301,7 +333,7 @@ function generateSeasonSummary(season: SeasonStats): string {
   if (grades.exitVelo && grades.exitVelo >= 55) {
     const evDesc = GRADE_DESCRIPTORS[grades.exitVelo];
     parts.push(
-      `${capitalize(evDesc)} bat speed with ${season.ev90!.toFixed(1)} mph 90th percentile exit velocity.`
+      `${capitalize(evDesc)} bat speed with ${Number(season.ev90)!.toFixed(1)} mph 90th percentile exit velocity.`
     );
   }
   
@@ -412,6 +444,10 @@ async function fetchSeasons(limit?: number): Promise<SeasonStats[]> {
       s.sb,
       s.war,
       s.wrc_plus,
+      s.avg,
+      s.obp,
+      s.slg,
+      s.ops,
       s.fielding,
       s.ev90,
       s.overall_grade,
@@ -427,7 +463,7 @@ async function fetchSeasons(limit?: number): Promise<SeasonStats[]> {
     FROM fg_season_stats s
     JOIN fg_players p ON s.fangraphs_id = p.fangraphs_id
     WHERE s.pa >= 50
-    ORDER BY s.year DESC, s.war DESC
+    ORDER BY s.war DESC
     ${limit ? `LIMIT ${limit}` : ''}
   `;
   
@@ -546,10 +582,14 @@ interface SearchFilters {
   maxWAR?: number;
   minOverallGrade?: number;
   maxOverallGrade?: number;
+  minHitGrade?: number;
+  maxHitGrade?: number;
   minPowerGrade?: number;
   maxPowerGrade?: number;
   minFieldingGrade?: number;
   maxFieldingGrade?: number;
+  minSpeedGrade?: number;
+  maxSpeedGrade?: number;
   yearRange?: [number, number];
 }
 
@@ -602,6 +642,18 @@ async function hybridSearch(
     paramIndex++;
   }
   
+  if (filters.minHitGrade !== undefined) {
+    whereClauses.push(`s.hit_grade >= \$${paramIndex}`);
+    params.push(filters.minHitGrade)
+    paramIndex++;
+  }
+  
+  if (filters.maxHitGrade !== undefined) {
+    whereClauses.push(`s.hit_grade <= \$${paramIndex}`);
+    params.push(filters.maxHitGrade)
+    paramIndex++;
+  }
+  
   if (filters.minPowerGrade !== undefined) {
     whereClauses.push(`s.power_grade >= \$${paramIndex}`);
     params.push(filters.minPowerGrade)
@@ -623,6 +675,18 @@ async function hybridSearch(
   if (filters.maxFieldingGrade !== undefined) {
     whereClauses.push(`s.fielding_grade <= \$${paramIndex}`);
     params.push(filters.maxFieldingGrade)
+    paramIndex++;
+  }
+  
+  if (filters.minSpeedGrade !== undefined) {
+    whereClauses.push(`s.speed_grade >= \$${paramIndex}`);
+    params.push(filters.minSpeedGrade)
+    paramIndex++;
+  }
+  
+  if (filters.maxSpeedGrade !== undefined) {
+    whereClauses.push(`s.speed_grade <= \$${paramIndex}`);
+    params.push(filters.maxSpeedGrade)
     paramIndex++;
   }
   
@@ -668,7 +732,7 @@ async function hybridSearch(
   console.log('Top results:\n');
   result.rows.forEach((row, idx) => {
     console.log(`${idx + 1}. (${(row.similarity * 100).toFixed(1)}% match)`);
-    console.log(`   WAR: ${row.war} | Position: ${row.position} | Grades: Overall=${row.overall_grade}, Power=${row.power_grade}, Hit=${row.hit_grade}`);
+    console.log(`   WAR: ${row.war} | Position: ${row.position} | Grades: Overall=${row.overall_grade}, Hit=${row.hit_grade}, Power=${row.power_grade}, Fielding=${row.fielding_grade}, Speed=${row.speed_grade}`);
     console.log(`   ${row.summary_text}\n`);
   });
 }
@@ -748,6 +812,10 @@ async function main() {
             filters.minFieldingGrade = parseInt(value);
           } else if (key === 'maxFieldingGrade') {
             filters.maxFieldingGrade = parseInt(value);
+          } else if (key === 'minSpeedGrade') {
+            filters.minSpeedGrade = parseInt(value);
+          } else if (key === 'maxSpeedGrade') {
+            filters.maxSpeedGrade = parseInt(value);
           } else if (key === 'yearStart' || key === 'yearEnd') {
             if (!filters.yearRange) filters.yearRange = [1988, 2025];
             if (key === 'yearStart') filters.yearRange[0] = parseInt(value);
@@ -787,20 +855,25 @@ Hybrid Search Filters:
   --maxWAR=X               Maximum WAR
   --minOverallGrade=X      Minimum overall grade (20-80 scale)
   --maxOverallGrade=X      Maximum overall grade
+  --minHitGrade=X          Minimum hit grade
+  --maxHitGrade=X          Maximum hit grade
   --minPowerGrade=X        Minimum power grade
   --maxPowerGrade=X        Maximum power grade
   --minFieldingGrade=X     Minimum fielding grade
   --maxFieldingGrade=X     Maximum fielding grade (use for poor defense)
+  --minSpeedGrade=X        Minimum speed grade
+  --maxSpeedGrade=X        Maximum speed grade
   --yearStart=YYYY         Start year
   --yearEnd=YYYY           End year
 
 Examples:
   npm start generate 100
   npm start test "elite power hitter with great defense"
-  npm start hybrid "power hitter" --position=1B --maxFieldingGrade=40
-  npm start hybrid "slugging first baseman with poor defense" --position=1B --minPowerGrade=60 --maxFieldingGrade=40
-  npm start hybrid "elite shortstop defender" --position=SS --minFieldingGrade=70
-  npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --minFieldingGrade=60
+  npm start -- hybrid "power hitter" --position=1B --maxFieldingGrade=40
+  npm start -- hybrid "slugging first baseman with poor defense" --position=1B --minPowerGrade=70 --maxFieldingGrade=30
+  npm start -- hybrid "elite shortstop defender" --position=SS --minFieldingGrade=70
+  npm start -- hybrid "five tool player" --minOverallGrade=60 --minHitGrade=60 --minPowerGrade=60 --minFieldingGrade=60 --minSpeedGrade=60
+  npm start -- hybrid "one of the best power speed seasons on record" --minPowerGrade=70 --minSpeedGrade=70
   npm start sample
       `);
     }

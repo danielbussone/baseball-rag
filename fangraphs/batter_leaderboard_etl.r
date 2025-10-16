@@ -188,6 +188,10 @@ season_stats <- fg_data %>%
 
 cat(sprintf("Season stats records: %d\n", nrow(season_stats)))
 
+mookie <- season_stats %>% filter(fangraphs_id == "13611")
+
+dodgers <- season_stats %>% filter(team == "LAD")
+
 # ============================================================================
 # GRADE CALCULATION (20-80 Scouting Scale)
 # ============================================================================

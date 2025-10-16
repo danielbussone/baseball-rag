@@ -116,17 +116,22 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 ### Phase 1: MVP (Core RAG Functionality)
 **Status:** ETL Complete ✅, Moving to Embeddings
 
-#### 1.1 Data Pipeline ✅
+#### 1.1 Data Pipeline ✅ COMPLETE
 - [x] FanGraphs batter leaderboards (1988-2025)
 - [x] PostgreSQL schema with proper indexes
 - [x] Incremental ETL (upsert logic)
 - [x] Three normalized tables (players, season_stats, pitch_data)
+- [x] **Grade calculation in R ETL** (20-80 scouting scale)
+- [x] **Grade distribution validation**
+- [x] Grades persisted to `fg_season_stats` with indexes
+- [x] **JAWS calculation in `fg_career_stats` view** (career + 7-year peak WAR)
 
-#### 1.2 Embedding Generation (In Progress)
-- [ ] Generate natural language summaries for player seasons
-- [ ] Create embeddings using transformers.js
-- [ ] Store embeddings in PGVector table
-- [ ] Test semantic search quality
+#### 1.2 Embedding Generation ✅ COMPLETE
+- [x] Generate natural language summaries for player seasons (template-based)
+- [x] Create embeddings using transformers.js (all-mpnet-base-v2)
+- [x] Store embeddings in PGVector table
+- [x] Test semantic search quality
+- [x] **Hybrid search implementation** (semantic + SQL filters on grades)
 
 #### 1.3 LLM Integration
 - [ ] Set up Ollama with appropriate model
