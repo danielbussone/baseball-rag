@@ -1,8 +1,8 @@
 # Baseball RAG Agent - Project Specification
 
-**Version:** 1.0  
-**Last Updated:** October 14, 2025  
-**Status:** Phase 1 Complete (ETL), Moving to Phase 2 (Embeddings)
+**Version:** 1.3  
+**Last Updated:** October 20, 2025  
+**Status:** Phase 1 Complete (ETL + Embeddings), Moving to Phase 1.3 (LLM Integration)
 
 ---
 
@@ -40,6 +40,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 │  - baseballr for API access                         │
 │  - Data transformation & cleaning                   │
 │  - Incremental upserts to Postgres                  │
+│  - Percentile calculation & grade assignment        │
 │  - (Future) R visualization generation              │
 └──────────────────┬──────────────────────────────────┘
                    ↓
@@ -50,6 +51,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
             │  Tables:     │
             │  - Players   │
             │  - Stats     │
+            │  - Percentiles│
             │  - Embeddings│
             └──────┬───────┘
                    ↓
@@ -67,6 +69,8 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
             │  - Chat UI   │
             │  - Stats vis │
             │  - Citations │
+            │  - Percentile│
+            │    graphs    │
             └──────────────┘
 ```
 
@@ -114,9 +118,9 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 ## Feature Breakdown
 
 ### Phase 1: MVP (Core RAG Functionality)
-**Status:** ETL Complete ✅, Moving to Embeddings
+**Status:** ETL ✅, Embeddings ✅, Moving to LLM Integration
 
-#### 1.1 Data Pipeline ✅ COMPLETE
+#### 1.1 Data Pipeline ✅ COMPLETE (Grades Pending Revision)
 - [x] FanGraphs batter leaderboards (1988-2025)
 - [x] PostgreSQL schema with proper indexes
 - [x] Incremental ETL (upsert logic)
@@ -124,7 +128,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [x] **Grade calculation in R ETL** (20-80 scouting scale)
 - [x] **Grade distribution validation**
 - [x] Grades persisted to `fg_season_stats` with indexes
-- [x] **JAWS calculation in `fg_career_stats` view** (career + 7-year peak WAR)
+- [ ] **PENDING: Migrate to percentile-based grade calculation** (will occur in Phase 2.5.1)
 
 #### 1.2 Embedding Generation ✅ COMPLETE
 - [x] Generate natural language summaries for player seasons (template-based)
@@ -133,14 +137,16 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [x] Test semantic search quality
 - [x] **Hybrid search implementation** (semantic + SQL filters on grades)
 
-#### 1.3 LLM Integration
+#### 1.3 LLM Integration (In Progress)
 - [ ] Set up Ollama with appropriate model
 - [ ] Implement tool/function calling
 - [ ] Create basic tools:
+  - `search_similar_players(query, filters)` - Hybrid semantic search
   - `get_player_stats(player_name, year)` - Fetch specific stats
-  - `search_similar_players(query)` - Vector similarity search
   - `compare_players(player1, player2)` - Side-by-side comparison
   - `get_career_summary(player_name)` - Career aggregates
+  - `get_player_percentiles(player_name, year?, scope?)` - Percentile rankings (Phase 2.5)
+  - `compare_player_percentiles(player1, player2, scope?)` - Percentile comparison (Phase 2.5)
 
 #### 1.4 Backend API
 - [ ] Express/Fastify server
@@ -186,6 +192,201 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [ ] Pitch-level data (2015+)
 - [ ] Exit velocity, launch angle, barrel rate
 - [ ] Sprint speed, defensive metrics
+
+---
+
+### Phase 2.5: Percentile Rankings & Visual Profiles
+**Status:** Planned (Requires Statcast Integration)
+**Dependencies:** Phase 2.4 (Statcast Data)
+
+#### 2.5.1 Percentile Calculation Infrastructure
+
+**Database Schema:**
+- [ ] Create `stat_percentiles` table (season, career, peak7 scopes)
+- [ ] Add minimum PA thresholds by scope (502 PA season, 3000 PA career, 3500 PA peak7)
+- [ ] Store percentile distributions (p1, p5, p10, p25, p40, p50, p60, p75, p90, p95, p99)
+- [ ] Store summary statistics (mean, stddev, min, max, qualified_count)
+- [ ] Index on (stat_name, year, scope)
+
+**R ETL Enhancements:**
+- [ ] Calculate percentiles during season stats ETL
+- [ ] Three calculation scopes:
+  - **Season**: Single-season percentiles by year (min 502 PA)
+  - **Career**: Career weighted averages → percentiles (min 3000 PA total)
+  - **Peak7**: Best 7-year rolling window → percentiles (min 3500 PA total)
+- [ ] Methodology:
+  - Season: Direct percentile calculation from qualified players each year
+  - Career: Calculate weighted career averages, then percentiles from those
+  - Peak7: Find best 7-year window per player, then percentiles from peaks
+- [ ] Upsert percentile thresholds to database
+- [ ] Validation: Check distributions follow expected curves (normal or skewed as appropriate)
+
+**Percentile-Based Grade Calculation (Replaces Current Method):**
+- [ ] Calculate player's percentile for each stat via interpolation
+- [ ] Implement two grade calculation methods for evaluation:
+  - **Method 1 (Percentile)**: 80=99th, 70=90th, 60=75th, 50=50th, 40=25th, 30=10th, 20=1st
+  - **Method 2 (Standard Deviation)**: 80=99.7th (μ+3σ), 70=97.7th (μ+2σ), 60=84.1th (μ+1σ), 50=50th (μ), etc.
+- [ ] Store both grade sets temporarily: `power_grade_pct`, `power_grade_sd` (etc.)
+- [ ] Evaluate which method produces better grades:
+  - Test normality of each stat (Shapiro-Wilk, skewness, kurtosis)
+  - Compare grade distributions to expectations
+  - Eye test with known players (peak Bonds, Trout, etc.)
+  - Analyze by stat type (power vs rate vs contact)
+- [ ] Choose final method (or hybrid approach: SD for normal stats, percentile for skewed)
+- [ ] Store both percentiles AND final grades in `fg_season_stats`
+- [ ] Add percentile columns: `power_percentile`, `hit_percentile`, etc. (NUMERIC 5,2)
+- [ ] Update existing grade columns with chosen methodology
+- [ ] Validate grade distributions match percentile targets
+- [ ] Re-run ETL to backfill all historical seasons with new grades
+- [ ] Document final decision and statistical rationale
+
+**Benefits of Percentile-Based Grades:**
+- Empirically accurate (60 grade = actually top 25% of players)
+- Works for non-normal distributions (handles skewed stats like HR, SB)
+- Era-neutral by definition (no complex plus stat adjustments needed)
+- Single source of truth (percentiles used for grades AND visualization)
+- Self-validating (grade distribution must match percentile distribution)
+
+**Stats to Track:**
+- **Offense**: `barrel_pct`, `ev90`, `hard_pct`, `maxev`, `la` (launch angle)
+- **Plate Discipline**: `bb_pct`, `k_pct`, `o_swing_pct` (chase rate), `swstr_pct` (whiff rate)
+- **Power**: `iso`, `hr_per_600`, `avg_hr_distance`
+- **Speed**: `sprint_speed`, `bolts` (30+ ft/s runs)
+- **Contact**: `contact_pct`, `z_contact_pct`
+- **Overall**: `wrc_plus`, `war_per_650`
+
+#### 2.5.2 Backend Percentile Tools
+
+**New LLM Tools:**
+- [ ] `get_player_percentiles(player_name, year?, scope?)` 
+  - Returns percentile data for visualization
+  - Flags players below PA minimums with `qualified: false`
+  - Defaults to most recent season, "season" scope
+  - Calculates player's percentile via interpolation from stored thresholds
+  
+- [ ] `compare_player_percentiles(player1, player2, scope?)`
+  - Side-by-side percentile comparison
+  - Highlights biggest differences (>20 percentile points)
+  - Useful for "compare X and Y" queries
+
+**Percentile Calculation Logic:**
+- [ ] TypeScript function: `calculatePlayerPercentile(value, stat, year, scope)`
+  - Binary search or linear interpolation between stored percentile thresholds
+  - Returns 0-100 percentile value
+  - Handles null values gracefully
+- [ ] Cache percentile threshold lookups (rarely change)
+- [ ] Handle edge cases:
+  - Values below p1 threshold → return 1
+  - Values above p99 threshold → return 99
+  - Missing stats (pre-Statcast era) → return null
+
+#### 2.5.3 Frontend Visualization
+
+**React Component: `<PercentileProfile>`**
+- [ ] Horizontal bar chart rendered with HTML/CSS (fast, interactive)
+- [ ] Color gradient: Blue (1st) → Gray (50th) → Red (99th)
+  - Use continuous gradient or discrete color steps
+  - Invert for "lower is better" stats (K%, Chase%)
+- [ ] Interactive features:
+  - Hover: Show exact value, percentile, and qualified status
+  - Click: Expand to see historical trend
+  - Smooth CSS animations on render
+  
+**Visual Indicators:**
+- [ ] Asterisk (*) next to stat name for below PA minimum
+- [ ] Faded/dashed bar for non-qualified percentiles
+- [ ] Tooltip on hover: "Minimum 502 PA for official ranking (has 387 PA)"
+- [ ] Badge for elite (90+) or concerning (<10) percentiles
+
+**Stat Categories:**
+- [ ] Group by category with headers:
+  - Power (barrel%, ISO, HR rate, exit velo)
+  - Plate Discipline (BB%, K%, Chase%, Whiff%)
+  - Contact (Contact%, Hard Hit%)
+  - Speed (Sprint Speed, Bolts)
+  - Overall (wRC+, WAR rate)
+- [ ] Collapsible sections for mobile
+- [ ] "Inverse" stats (K%, Chase%) where lower is better:
+  - Display as "better than X%" instead of raw percentile
+  - Flip color gradient (red for low, blue for high)
+
+**Display Modes:**
+- [ ] Single player profile (stacked bars with categories)
+- [ ] Two-player comparison (side-by-side, highlight differences)
+- [ ] Historical view (optional: sparkline of percentile over career)
+
+#### 2.5.4 LLM Integration
+
+**Smart Triggering:**
+LLM automatically calls percentile tool for:
+- [ ] "Tell me about [player]" queries
+- [ ] "Compare [player1] and [player2]"
+- [ ] "Show me [player]'s strengths and weaknesses"
+- [ ] "What are [player]'s best skills?"
+- [ ] "Is [player] elite at [skill]?"
+
+**Narrative Integration:**
+- [ ] LLM highlights elite skills (≥90th percentile) in response
+  - "Betts ranks in the 92nd percentile for barrel rate, demonstrating elite power..."
+- [ ] Notes significant weaknesses (≤30th percentile)
+  - "However, his chase rate is concerning at the 28th percentile..."
+- [ ] Contextualizes comparisons:
+  - "While both are elite hitters, Trout has significantly better plate discipline (95th vs 78th percentile in BB%)"
+- [ ] References scope appropriately:
+  - Career percentiles for all-time comparisons
+  - Season percentiles for current form
+  - Peak7 for prime comparisons
+
+**Tool Response Format:**
+```json
+{
+  "player": "Mookie Betts",
+  "year": 2024,
+  "scope": "season",
+  "qualified": true,
+  "pa": 609,
+  "min_pa": 502,
+  "percentiles": [
+    {
+      "stat": "barrel_pct",
+      "display_name": "Barrel %",
+      "category": "Power",
+      "value": 14.2,
+      "percentile": 92,
+      "color": "#ef4444",
+      "inverse": false
+    },
+    {
+      "stat": "k_pct",
+      "display_name": "K%",
+      "category": "Plate Discipline",
+      "value": 15.8,
+      "percentile": 12,
+      "better_than": 88,
+      "color": "#ef4444",
+      "inverse": true
+    }
+  ]
+}
+```
+
+#### 2.5.5 Acceptance Criteria
+
+**Must Have:**
+- [ ] User asks "Tell me about Mookie Betts"
+- [ ] System returns narrative summary + percentile visualization
+- [ ] Shows 8-12 key stats grouped by category
+- [ ] Color-coded bars with hover tooltips
+- [ ] Percentiles accurate to within ±1 percentile point
+- [ ] Sub-minimum PA players shown with asterisk/faded bar
+- [ ] "Inverse" stats (K%, Chase%) displayed correctly
+
+**Nice to Have:**
+- [ ] Smooth animations on bar rendering
+- [ ] Export percentile chart as PNG/SVG
+- [ ] Historical sparkline (percentile trend over past 3-5 years)
+- [ ] Position-adjusted percentiles (compare SS to SS pool, not all players)
+- [ ] Configurable stat selection (user picks which stats to show)
 
 ---
 
@@ -251,7 +452,67 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - More complex deployment
 - Worth it for leveraging best-in-class tools
 
-### 2. **PGVector over ChromaDB**
+### 2. **Grades Calculated in R ETL** ⭐ REVISED
+**Current Implementation (Phase 1.1):**
+- Grades calculated using era-adjusted "plus" stats (e.g., `iso_plus`, `avg_plus` where 100 = league average)
+- Uses standard deviation thresholds
+- Works but has limitations (assumes normal distribution, arbitrary thresholds)
+
+**Future Implementation (Phase 2.5.1):**
+- **Percentile-first approach**: Calculate percentiles, then map to 20-80 grades
+- Grade mapping based on scouting scale conventions:
+  - 80 (Elite) = 99th percentile
+  - 70 (Plus-Plus) = 90th percentile
+  - 60 (Plus) = 75th percentile
+  - 50 (Average) = 50th percentile (median)
+  - 40 (Fringe) = 25th percentile
+  - 30 (Poor) = 10th percentile
+  - 20 (Very Poor) = 1st percentile
+
+**Rationale for Percentile-Based Grades:**
+- Empirically accurate (60 grade = actually top 25% of qualified players)
+- Works for non-normal distributions (HR, SB are skewed)
+- Era-neutral by definition
+- Single calculation used for both grades AND visualization
+- Self-validating (grade distribution must match percentile targets)
+
+**Migration Path:**
+- Current grades remain functional for MVP
+- Percentile calculation added in Phase 2.5.1
+- Grades recalculated from percentiles in same phase
+- Both percentiles and grades stored in `fg_season_stats`
+
+**Benefits:**
+- Grade distribution validation during ETL (should see ~10% with 70+ grades)
+- SQL queries like `WHERE power_grade >= 70` still work
+- No runtime grade calculation overhead
+- Single calculation, used everywhere (embeddings, tools, UI, visualization)
+
+### 3. **Hybrid Search (Semantic + Filters)** ⭐ NEW
+**Rationale:**
+- Pure semantic search doesn't respect hard constraints (e.g., "first baseman")
+- Combining vector similarity with SQL filters gives best of both worlds
+- Leverages indexed grade columns for fast filtering
+
+**Implementation:**
+```sql
+-- Semantic similarity via pgvector
+FROM player_embeddings e
+JOIN fg_season_stats s ON e.player_season_id = s.player_season_id
+WHERE e.embedding_type = 'season_summary'
+  AND s.position ILIKE '%1B%'      -- Hard filter
+  AND s.power_grade >= 60           -- Hard filter
+  AND s.fielding_grade <= 40        -- Hard filter
+ORDER BY e.embedding <=> query_embedding  -- Semantic ranking
+```
+
+**Benefits:**
+- Respects user constraints (position, grade thresholds, years)
+- Uses indexed columns for performance
+- Still gets semantic matching on playing style/description
+- Natural for LLM tool calling (LLM extracts filters from query)
+
+### 4. **PGVector over ChromaDB**
 **Rationale:**
 - Single database for structured stats AND vectors
 - Enables hybrid queries (filter by year, THEN vector search)
@@ -263,7 +524,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - Less "plug-and-play" than specialized vector DBs
 - Worth it for query flexibility
 
-### 3. **Ollama over Cloud LLMs**
+### 5. **Ollama over Cloud LLMs**
 **Rationale:**
 - Fully local, no API costs
 - Privacy and data control
@@ -275,7 +536,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - Model quality ceiling lower than GPT-4
 - Worth it for local-first principle
 
-### 4. **FanGraphs First, Then Baseball Reference**
+### 6. **FanGraphs First, Then Baseball Reference**
 **Rationale:**
 - FanGraphs has clean API via `baseballr`
 - Advanced metrics readily available
@@ -287,7 +548,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - Missing some biographical richness
 - Worth it for rapid prototyping
 
-### 5. **Incremental ETL over Full Refresh**
+### 7. **Incremental ETL over Full Refresh**
 **Rationale:**
 - Preserves manual corrections
 - Faster updates
@@ -299,11 +560,173 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - Requires conflict handling
 - Worth it for data integrity
 
+### 8. **Career Percentiles from Weighted Averages**
+**Rationale:**
+- Career percentiles calculated from career stat averages, not mean of season percentiles
+- Avoids statistical distortion (percentiles don't average linearly)
+- Season percentiles: Direct calculation from qualified players each year
+- Career percentiles: Weighted career averages → then calculate percentiles
+- Peak7 percentiles: Best 7-year rolling window → then calculate percentiles
+- Small computational cost (~5-10 seconds during ETL) for statistical accuracy
+
+**Trade-offs:**
+- Slightly more complex than averaging season percentiles
+- Requires rolling window calculation for Peak7
+- Worth it for accurate, defensible percentile rankings
+
+### 9. **Pre-computed Percentiles in Database**
+**Rationale:**
+- Store percentile thresholds (p1, p5, p10...p99) in database
+- Runtime interpolation to find player's percentile (fast)
+- Enables instant percentile lookups without recalculation
+- Three scopes (season/career/peak7) for different contexts
+
+**Benefits:**
+- Sub-millisecond percentile lookups
+- Consistent methodology across application
+- Easy to update during ETL
+- Supports multiple comparison contexts
+
+### 10. **Percentile-Based Grades (Future)** ⭐ MAJOR IMPROVEMENT
+**Current State:**
+- Grades calculated using plus stats and standard deviations
+- Works but has theoretical limitations
+
+**Future State (Phase 2.5.1):**
+- Calculate percentiles first, then derive grades
+- Two methodologies to evaluate:
+  - **Percentile approach**: 70 grade = 90th percentile (10% get 70+)
+  - **Standard Deviation approach**: 70 grade = μ + 2σ ≈ 97.7th percentile (2.3% get 70+)
+- Store both percentiles and grades in `fg_season_stats`
+
+**Rationale:**
+- The 20-80 scale was originally based on standard deviations (50 = mean, ±10 = ±1σ)
+- However, many baseball stats are NOT normally distributed:
+  - Power stats (HR, ISO, SLG) are right-skewed
+  - WAR has a replacement-level floor (skewed right)
+  - Contact/average stats are bounded (can't exceed 1.000)
+- Percentile approach is distribution-agnostic and more intuitive
+- SD approach is theoretically pure but may be too stringent for skewed stats
+
+**Implementation Strategy:**
+- Calculate both grade sets during Phase 2.5.1
+- Test normality of each stat (Shapiro-Wilk, skewness)
+- Evaluate which method produces more accurate/useful grades
+- Consider hybrid: SD for normal stats, percentile for skewed stats
+- Choose final methodology based on empirical analysis
+
+**Benefits:**
+- Empirically accurate: Grades mean what scouts intend
+- Can validate against stat distributions
+- Single calculation serves dual purpose (grading + visualization)
+- Flexible: Can adjust thresholds based on data
+
+**Migration:**
+- Current grades remain functional until Phase 2.5.1
+- Backward compatible: Grade columns stay, just calculated differently
+- Re-run ETL to backfill historical data with percentile-based grades
+
 ---
 
 ## Database Schema
 
-### Version 1.0 (Current)
+### Version 1.3 (Planned - Phase 2.5)
+
+#### `stat_percentiles`
+Pre-calculated percentile thresholds for fast player ranking across three scopes.
+
+**Key columns:**
+- `id` (PK) - Auto-increment
+- `stat_name` - Name of statistic (e.g., 'barrel_pct', 'wrc_plus')
+- `year` - Season year for 'season' scope, 0 for 'career'/'peak7'
+- `scope` - 'season', 'career', or 'peak7'
+- `min_pa` - PA minimum used for qualified pool
+- `qualified_count` - Number of qualified players in distribution
+- Percentile thresholds: `p1`, `p5`, `p10`, `p25`, `p40`, `p50`, `p60`, `p75`, `p90`, `p95`, `p99`
+- Summary stats: `mean`, `stddev`, `min_value`, `max_value`
+
+**Calculation methodology:**
+- **Season scope**: Percentiles calculated directly from qualified players each year (min 502 PA)
+- **Career scope**: Career weighted averages calculated per player (min 3000 PA), then percentiles from those averages
+- **Peak7 scope**: Best 7-year rolling window per player (min 3500 PA), then percentiles from peak values
+
+**Grade Calculation (20-80 Scale):**
+Grades are derived from percentiles. Two methodologies will be evaluated:
+
+**Method 1: Percentile-Based (Practical Approach)**
+```
+80 (Elite)         → 99th percentile
+75 (Plus-Plus/Elite) → 95th percentile
+70 (Plus-Plus)     → 90th percentile
+65 (Above Plus)    → 80th percentile
+60 (Plus)          → 75th percentile
+55 (Above Avg)     → 60th percentile
+50 (Average)       → 50th percentile (median)
+45 (Below Avg)     → 40th percentile
+40 (Fringe)        → 25th percentile
+35 (Poor)          → 15th percentile
+30 (Poor)          → 10th percentile
+25 (Very Poor)     → 5th percentile
+20 (Very Poor)     → 1st percentile
+```
+
+**Method 2: Standard Deviation-Based (Traditional Scouting Scale)**
+The 20-80 scale was originally based on standard deviations from the mean:
+```
+80 grade = μ + 3σ  → 99.7th percentile (3 SD above mean)
+70 grade = μ + 2σ  → 97.7th percentile (2 SD above mean)
+60 grade = μ + 1σ  → 84.1th percentile (1 SD above mean)
+50 grade = μ       → 50th percentile (mean)
+40 grade = μ - 1σ  → 15.9th percentile (1 SD below mean)
+30 grade = μ - 2σ  → 2.3rd percentile (2 SD below mean)
+20 grade = μ - 3σ  → 0.3rd percentile (3 SD below mean)
+```
+
+**Key Differences:**
+- **SD approach**: Assumes normal distribution, more stringent (only ~2.3% get 70+ grades)
+- **Percentile approach**: Distribution-agnostic, more generous (10% get 70+ grades)
+- **Baseball reality**: Many stats are NOT normally distributed (HR, SB are right-skewed; AVG is bounded)
+
+**Implementation Plan:**
+- [ ] Calculate grades using both methods during Phase 2.5.1
+- [ ] Store both sets of grades temporarily: `power_grade_pct`, `power_grade_sd`
+- [ ] Evaluate which approach produces more accurate/useful grades:
+  - Check grade distributions (2% vs 10% with 70+ grades)
+  - Eye test: Do grades "feel right" for known players?
+  - Test normality of each stat (Shapiro-Wilk test)
+  - Compare skewness: Power stats (HR, ISO) vs rate stats (BB%, K%)
+- [ ] Choose one method (or hybrid: SD for normal stats, percentile for skewed)
+- [ ] Document final decision and rationale
+
+**Expected Findings:**
+- Power stats (HR, ISO, SLG): Heavily right-skewed → percentile approach more appropriate
+- Rate stats (BB%, K%): Closer to normal → SD approach may align well
+- WAR: Right-skewed (replacement floor) → percentile approach likely better
+- Contact stats (AVG, OBP): Bounded above → percentile approach more robust
+
+This ensures that grades have empirical meaning:
+- A 60-grade tool means top 16-25% of qualified players (depending on method)
+- A 70-grade tool means top 2-10% of qualified players (depending on method)
+- A 50-grade tool means exactly league average (mean or median)
+
+**Indexes:**
+- Composite: `(stat_name, year, scope)` for fast lookups
+- Single: `stat_name`
+
+**Example row:**
+```
+stat_name: 'barrel_pct'
+year: 2024
+scope: 'season'
+min_pa: 502
+qualified_count: 143
+p1: 2.1, p5: 3.4, p10: 4.2, p25: 6.1, p40: 7.2, p50: 8.5, p60: 9.8, p75: 11.2, p90: 13.8, p95: 15.1, p99: 17.9
+mean: 8.7, stddev: 3.4
+```
+
+---
+
+### Version 1.2 (Current)
 
 #### `fg_players`
 Dimension table with one row per unique player.
@@ -317,20 +740,45 @@ Dimension table with one row per unique player.
 - `created_at`, `updated_at` - Audit timestamps
 
 #### `fg_season_stats`
-One row per player per season with batting statistics.
+One row per player per season with batting statistics **and grades**.
 
 **Key columns:**
 - `player_season_id` (PK) - Composite key: `{fangraphs_id}_{year}`
 - `fangraphs_id` (FK) - Links to players
-- `year`, `age`, `team` - Context
+- `year`, `age`, `team`, `position` - Context
 - Basic stats: `g`, `pa`, `ab`, `h`, `hr`, `rbi`, `sb`, etc.
 - Rate stats: `avg`, `obp`, `slg`, `ops`, `iso`, `babip`
 - Advanced: `wrc_plus`, `war`, `woba`, `bb_pct`, `k_pct`
+- Plus stats (era-adjusted): `avg_plus`, `iso_plus`, `bb_pct_plus`, `k_pct_plus`, etc.
 - Batted ball: `gb_pct`, `fb_pct`, `ld_pct`, `hard_pct`
-- Statcast (2015+): `ev`, `la`, `barrel_pct`, `maxev`
+- Statcast (2015+): `ev`, `ev90`, `la`, `barrel_pct`, `maxev`
+- **Grades (20-80 scale)**: ⭐ CURRENT (Plus-stat based, to be revised in Phase 2.5.1)
+  - `overall_grade` - WAR-based
+  - `offense_grade` - wRC+ based
+  - `power_grade` - ISO+ based
+  - `hit_grade` - AVG+ based
+  - `discipline_grade` - BB%+ based
+  - `contact_grade` - K%+ based
+  - `speed_grade` - SB/600PA based
+  - `fielding_grade` - Era/position adjusted
+  - `hard_contact_grade` - Hard Hit%+ (2015+)
+  - `exit_velo_grade` - EV90 (2015+)
+- **Percentiles (0-100)**: ⭐ PLANNED (Phase 2.5.1)
+  - `overall_percentile` - WAR percentile
+  - `offense_percentile` - wRC+ percentile
+  - `power_percentile` - ISO percentile
+  - `hit_percentile` - AVG percentile
+  - `discipline_percentile` - BB% percentile
+  - `contact_percentile` - K% percentile (inverse: lower K% = higher percentile)
+  - `speed_percentile` - SB/600PA percentile
+  - `fielding_percentile` - Fielding percentile
+  - `hard_contact_percentile` - Hard Hit% percentile (2015+)
+  - `exit_velo_percentile` - EV90 percentile (2015+)
 
 **Indexes:**
-- `fangraphs_id`, `year`, `war DESC`, `wrc_plus DESC`
+- `fangraphs_id`, `year`, `war DESC`, `wrc_plus DESC`, `position`
+- **Grade indexes**: `overall_grade`, `power_grade`, `hit_grade`, `fielding_grade`
+- **Percentile indexes** (Phase 2.5.1): `overall_percentile`, `power_percentile`, `hit_percentile`, `fielding_percentile`
 
 #### `fg_batter_pitches_faced`
 Pitch-level data for what batters faced (optional, very granular).
@@ -341,11 +789,30 @@ Pitch-level data for what batters faced (optional, very granular).
 - PITCHInfo data: alternative classification system
 - Plate discipline vs pitch types
 
+#### `player_embeddings`
+Vector embeddings for semantic search of player seasons.
+
+**Key columns:**
+- `id` (PK) - Auto-increment
+- `player_season_id` - Links to season_stats
+- `fangraphs_id` (FK) - Links to players
+- `year` - Season year
+- `embedding_type` - 'season_summary', 'career_summary', 'pitch_profile'
+- `summary_text` - Natural language description that was embedded
+- `embedding` - 768-dimensional vector (all-mpnet-base-v2)
+- `metadata` - JSONB with key stats for filtering
+
+**Indexes:**
+- HNSW index on embedding vector
+- Indexes on type, player, year
+- GIN index on metadata JSONB
+
 #### Future Tables
-- `player_embeddings` - Vector embeddings for semantic search
+- ~~`player_embeddings`~~ ✅ COMPLETE - Vector embeddings for semantic search
 - `fg_pitcher_stats` - Pitcher statistics
 - `bref_players` - Baseball Reference biographical data
 - `statcast_metrics` - Aggregated Statcast data
+- `stat_percentiles` - Pre-calculated percentile distributions (Phase 2.5)
 
 ---
 
@@ -353,22 +820,25 @@ Pitch-level data for what batters faced (optional, very granular).
 
 ### Current Phase Checklist
 
-**Phase 1.2: Embeddings (Current)**
-1. Design player season summary template
-2. Create TypeScript script to:
-   - Read from `fg_season_stats`
-   - Generate natural language descriptions
-   - Create embeddings with transformers.js
-   - Store in new `player_embeddings` table
-3. Test embedding quality with sample queries
-4. Optimize embedding generation (batch processing)
+**Phase 1.3: LLM Integration (Current)**
+1. Install and configure Ollama locally
+2. Choose model (llama3.1:8b or qwen2.5:14b)
+3. Create tool definitions:
+   - `search_similar_players()` - wraps hybrid search
+   - `get_player_stats()` - fetch specific season
+   - `compare_players()` - side-by-side comparison
+4. Implement tool calling loop
+5. Test with example queries:
+   - "Compare Mike Trout and Ken Griffey Jr"
+   - "Find elite defensive shortstops from 2010-2020"
+   - "Show me power hitters with poor defense"
 
 ### Running the Project (Current State)
 
 #### Prerequisites
 - Docker Desktop (for PostgreSQL)
 - R 4.x+ with packages: `baseballr`, `DBI`, `RPostgres`, `dplyr`
-- Node.js 18+ (for future TypeScript work)
+- Node.js 18+ (for TypeScript embedding system)
 
 #### Setup Database
 ```bash
@@ -389,6 +859,30 @@ psql -h localhost -U postgres -d postgres -f fangraphs_schema.sql
 # Edit batter_leaderboard_etl.r to set password
 # Then run:
 Rscript batter_leaderboard_etl.r
+
+# This will:
+# - Pull FanGraphs data (1988-2025)
+# - Calculate grades (20-80 scale)
+# - Validate grade distributions
+# - Load to Postgres with upsert
+```
+
+#### Generate Embeddings
+```bash
+cd baseball-embeddings
+npm install
+npm run generate  # Generates embeddings for all seasons (~15-20 minutes)
+```
+
+#### Test Hybrid Search
+```bash
+# Basic semantic search
+npm start test "elite power hitter"
+
+# Hybrid search with filters
+npm start hybrid "slugging first baseman" --position=1B --minPowerGrade=60 --maxFieldingGrade=40
+npm start hybrid "defensive wizard" --position=SS --minFieldingGrade=70
+npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --minFieldingGrade=60
 ```
 
 #### Verify Data
@@ -398,9 +892,18 @@ psql -h localhost -U postgres -d postgres
 # Check record counts
 SELECT COUNT(*) FROM fg_players;
 SELECT COUNT(*) FROM fg_season_stats;
+SELECT COUNT(*) FROM player_embeddings;
 
 # Top players by WAR
 SELECT * FROM fg_career_stats ORDER BY total_war DESC LIMIT 10;
+
+# Test grade filtering
+SELECT player_name, year, war, overall_grade, power_grade
+FROM fg_season_stats s
+JOIN fg_players p ON s.fangraphs_id = p.fangraphs_id
+WHERE power_grade >= 70
+ORDER BY power_grade DESC, war DESC
+LIMIT 10;
 ```
 
 ---
@@ -476,19 +979,49 @@ SELECT * FROM fg_career_stats ORDER BY total_war DESC LIMIT 10;
 
 ## Lessons Learned
 
+### Phase 1.1 (ETL)
 1. **FanGraphs API behavior:** Doesn't handle multi-year requests well, required year-by-year iteration
 2. **Schema evolution:** Pitch tracking data format changed over time (simple velocities vs. PITCHf/x)
 3. **Upsert strategy:** Critical for incremental updates without data loss
 4. **Column naming:** FanGraphs uses special characters (`%`, `+`, `-`) requiring careful cleaning
+
+### Phase 1.2 (Embeddings & Search)
+5. **Grade calculation in R is superior:** Statistical validation, single source of truth, enables SQL filtering
+6. **Template-based summaries work well:** Consistent, fast, good semantic matching without LLM overhead
+7. **Hybrid search is essential:** Pure semantic search doesn't respect hard constraints (position, grade thresholds)
+8. **Join to stats table, don't use JSONB metadata:** Leverages indexes, faster, type-safe
+9. **Position descriptions matter:** "at catcher" vs "catcher" affects embedding quality
+10. **Grade distribution validation catches errors:** Immediately see if grading thresholds are wrong
+
+### Phase 2.5 (Percentile Rankings) - Future
+11. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+12. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+13. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+14. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+15. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
 
 ---
 
 ## Contact & Resources
 
 ### Documentation
-- FanGraphs schema: `fangraphs_schema.sql`
+- FanGraphs schema: `fangraphs_schema.sql` (v1.2)
 - ETL script: `batter_leaderboard_etl.r`
+- Embedding system: `index.ts`
 - Project spec: This document
+
+### Key Files
+```
+baseball-rag/
+├── fangraphs_schema.sql         # Database schema v1.2
+├── batter_leaderboard_etl.r     # R ETL with grade calculation
+├── baseball-embeddings/
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       └── index.ts             # Embedding generation + hybrid search
+└── PROJECT_SPEC.md              # This document
+```
 
 ### External Resources
 - baseballr: https://billpetti.github.io/baseballr/
@@ -499,4 +1032,4 @@ SELECT * FROM fg_career_stats ORDER BY total_war DESC LIMIT 10;
 
 ---
 
-**Next Step:** Create TypeScript embedding generation script
+**Next Step:** Install Ollama and implement tool calling for LLM integration (Phase 1.3)
