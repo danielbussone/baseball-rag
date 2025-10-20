@@ -1,6 +1,6 @@
 # Baseball RAG Agent - Project Specification
 
-**Version:** 1.3  
+**Version:** 1.4  
 **Last Updated:** October 20, 2025  
 **Status:** Phase 1 Complete (ETL + Embeddings), Moving to Phase 1.3 (LLM Integration)
 
@@ -61,6 +61,8 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 │  - Ollama integration (LLM orchestration)           │
 │  - Function/tool calling                            │
 │  - Vector search (semantic similarity)              │
+│  - Full-text search (keyword matching)              │
+│  - Cross-encoder reranking                          │
 │  - Embedding generation (transformers.js)           │
 └──────────────────┬──────────────────────────────────┘
                    ↓
@@ -87,6 +89,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   
 - **PostgreSQL** (16+) - Primary database
   - `pgvector` extension for vector storage
+  - Full-text search (FTS) with tsvector
   - Running via Docker for easy setup
 
 ### Application Layer
@@ -94,6 +97,8 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - Runtime: Node 18+
   - Database: `pg` or `kysely` (type-safe query builder)
   - Embeddings: `@xenova/transformers` (transformers.js)
+  - Reranking: Cross-encoder models
+  - NLP: `compromise` for keyword extraction
   - API Framework: Express or Fastify
   
 - **Ollama** - Local LLM runtime
@@ -107,11 +112,15 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - WebSocket/SSE for streaming responses
   - Recharts or D3.js for visualizations
 
-### Embeddings
-- **Model:** `all-mpnet-base-v2` (768 dimensions)
+### Embeddings & Search
+- **Bi-encoder:** `all-mpnet-base-v2` (768 dimensions)
   - Good quality/size tradeoff
   - Runs locally via transformers.js
   - ~420MB model size
+  
+- **Cross-encoder (Reranking):** `cross-encoder/ms-marco-MiniLM-L-6-v2`
+  - Reranks top candidates for precision
+  - ~80MB model size
 
 ---
 
@@ -128,7 +137,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [x] **Grade calculation in R ETL** (20-80 scouting scale)
 - [x] **Grade distribution validation**
 - [x] Grades persisted to `fg_season_stats` with indexes
-- [ ] **PENDING: Migrate to percentile-based grade calculation** (will occur in Phase 2.5.1)
+- [ ] **PENDING: Migrate to percentile-based grade calculation** (will occur in Phase 2.7.1)
 
 #### 1.2 Embedding Generation ✅ COMPLETE
 - [x] Generate natural language summaries for player seasons (template-based)
@@ -145,8 +154,8 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - `get_player_stats(player_name, year)` - Fetch specific stats
   - `compare_players(player1, player2)` - Side-by-side comparison
   - `get_career_summary(player_name)` - Career aggregates
-  - `get_player_percentiles(player_name, year?, scope?)` - Percentile rankings (Phase 2.5)
-  - `compare_player_percentiles(player1, player2, scope?)` - Percentile comparison (Phase 2.5)
+  - `get_player_percentiles(player_name, year?, scope?)` - Percentile rankings (Phase 2.7)
+  - `compare_player_percentiles(player1, player2, scope?)` - Percentile comparison (Phase 2.7)
 
 #### 1.4 Backend API
 - [ ] Express/Fastify server
@@ -171,35 +180,89 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 ### Phase 2: Enhanced Retrieval
 **Status:** Not Started
 
-#### 2.1 Baseball Reference Integration
+#### 2.1 Full-Text Search (FTS) for Short Queries
+- [ ] Add PostgreSQL Full-Text Search (FTS) infrastructure
+  - [ ] Add `summary_tsv` tsvector column to `player_embeddings`
+  - [ ] Create GIN index on `summary_tsv`
+  - [ ] Create trigger to auto-update tsvector on insert/update
+  - [ ] Populate existing rows with tsvectors
+  
+- [ ] Implement keyword extraction in TypeScript
+  - [ ] Baseball-specific phrase detection (positions, qualities)
+  - [ ] NLP-based noun phrase extraction (using `compromise`)
+  - [ ] Pattern matching for common query types
+  - [ ] Convert keywords to PostgreSQL tsquery format
+  
+- [ ] Implement query router
+  - [ ] Route queries ≤4 tokens to FTS (keyword matching)
+  - [ ] Route queries >4 tokens to semantic search (vector similarity)
+  - [ ] Hybrid mode: combine FTS + vector for medium queries
+  
+- [ ] **Benefits:**
+  - Solves length normalization bias for short queries
+  - Faster than vector search (~10-50ms vs 50-100ms)
+  - Exact phrase matching ("all time great" as unit)
+  - Better handling of baseball-specific terminology
+
+#### 2.2 Two-Stage Retrieval with Reranking
+- [ ] Add cross-encoder reranking model
+  - [ ] Load `cross-encoder/ms-marco-MiniLM-L-6-v2` via transformers.js
+  - [ ] Batch processing for performance (32 candidates at a time)
+  - [ ] Cache model in memory after first load
+  
+- [ ] Implement two-stage retrieval pipeline
+  - **Stage 1:** Fast retrieval (50-100 candidates)
+    - Use FTS for short queries
+    - Use vector search for long queries
+    - Apply SQL filters (position, grades, years)
+  - **Stage 2:** Precise reranking (top 10)
+    - Score each candidate with cross-encoder
+    - Cross-encoder sees query + document together
+    - Sort by rerank score, return top K
+    
+- [ ] **Benefits:**
+  - Solves bi-encoder limitation with opposites
+  - Handles negation ("power WITHOUT speed")
+  - Better at multi-constraint queries ("elite defense BUT below-average offense")
+  - Distinguishes opposites ("all time great" ≠ "replacement level")
+  - Deep semantic understanding via attention mechanism
+  
+- [ ] **Performance target:** <1 second total
+  - Stage 1 retrieval: ~50ms
+  - Stage 2 reranking (50 candidates): ~500ms
+  - Total: ~550ms (acceptable for user query)
+
+#### 2.3 Baseball Reference Integration
 - [ ] Web scraper for player biographical data
 - [ ] Career narratives and context
 - [ ] Awards, All-Star appearances
 - [ ] Integration with existing FanGraphs data
 
-#### 2.2 Advanced Query Tools
+#### 2.4 Advanced Query Tools
 - [ ] Era-based filtering ("players in the 1990s")
 - [ ] Position-based search ("best shortstops")
 - [ ] Multi-year aggregations
 - [ ] Peak season detection
 
-#### 2.3 Wikipedia Integration
+#### 2.5 Wikipedia Integration
 - [ ] API calls for biographical info
 - [ ] Career highlights and context
 - [ ] Link to external resources
 
-#### 2.4 Statcast Data
+#### 2.6 Statcast Data ⭐ DEPENDENCY for Phase 2.7
 - [ ] Pitch-level data (2015+)
 - [ ] Exit velocity, launch angle, barrel rate
 - [ ] Sprint speed, defensive metrics
+- [ ] Aggregation at season level
+- [ ] Integration with existing FanGraphs stats
 
 ---
 
-### Phase 2.5: Percentile Rankings & Visual Profiles
+### Phase 2.7: Percentile Rankings & Visual Profiles
 **Status:** Planned (Requires Statcast Integration)
-**Dependencies:** Phase 2.4 (Statcast Data)
+**Dependencies:** Phase 2.6 (Statcast Data)
 
-#### 2.5.1 Percentile Calculation Infrastructure
+#### 2.7.1 Percentile Calculation Infrastructure
 
 **Database Schema:**
 - [ ] Create `stat_percentiles` table (season, career, peak7 scopes)
@@ -255,7 +318,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - **Contact**: `contact_pct`, `z_contact_pct`
 - **Overall**: `wrc_plus`, `war_per_650`
 
-#### 2.5.2 Backend Percentile Tools
+#### 2.7.2 Backend Percentile Tools
 
 **New LLM Tools:**
 - [ ] `get_player_percentiles(player_name, year?, scope?)` 
@@ -280,7 +343,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - Values above p99 threshold → return 99
   - Missing stats (pre-Statcast era) → return null
 
-#### 2.5.3 Frontend Visualization
+#### 2.7.3 Frontend Visualization
 
 **React Component: `<PercentileProfile>`**
 - [ ] Horizontal bar chart rendered with HTML/CSS (fast, interactive)
@@ -315,7 +378,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [ ] Two-player comparison (side-by-side, highlight differences)
 - [ ] Historical view (optional: sparkline of percentile over career)
 
-#### 2.5.4 LLM Integration
+#### 2.7.4 LLM Integration
 
 **Smart Triggering:**
 LLM automatically calls percentile tool for:
@@ -370,7 +433,7 @@ LLM automatically calls percentile tool for:
 }
 ```
 
-#### 2.5.5 Acceptance Criteria
+#### 2.7.5 Acceptance Criteria
 
 **Must Have:**
 - [ ] User asks "Tell me about Mookie Betts"
@@ -458,7 +521,7 @@ LLM automatically calls percentile tool for:
 - Uses standard deviation thresholds
 - Works but has limitations (assumes normal distribution, arbitrary thresholds)
 
-**Future Implementation (Phase 2.5.1):**
+**Future Implementation (Phase 2.7.1):**
 - **Percentile-first approach**: Calculate percentiles, then map to 20-80 grades
 - Grade mapping based on scouting scale conventions:
   - 80 (Elite) = 99th percentile
@@ -478,7 +541,7 @@ LLM automatically calls percentile tool for:
 
 **Migration Path:**
 - Current grades remain functional for MVP
-- Percentile calculation added in Phase 2.5.1
+- Percentile calculation added in Phase 2.7.1
 - Grades recalculated from percentiles in same phase
 - Both percentiles and grades stored in `fg_season_stats`
 
@@ -488,7 +551,7 @@ LLM automatically calls percentile tool for:
 - No runtime grade calculation overhead
 - Single calculation, used everywhere (embeddings, tools, UI, visualization)
 
-### 3. **Hybrid Search (Semantic + Filters)** ⭐ NEW
+### 3. **Hybrid Search (Semantic + Filters)** ⭐ CURRENT
 **Rationale:**
 - Pure semantic search doesn't respect hard constraints (e.g., "first baseman")
 - Combining vector similarity with SQL filters gives best of both worlds
@@ -592,7 +655,7 @@ ORDER BY e.embedding <=> query_embedding  -- Semantic ranking
 - Grades calculated using plus stats and standard deviations
 - Works but has theoretical limitations
 
-**Future State (Phase 2.5.1):**
+**Future State (Phase 2.7.1):**
 - Calculate percentiles first, then derive grades
 - Two methodologies to evaluate:
   - **Percentile approach**: 70 grade = 90th percentile (10% get 70+)
@@ -609,7 +672,7 @@ ORDER BY e.embedding <=> query_embedding  -- Semantic ranking
 - SD approach is theoretically pure but may be too stringent for skewed stats
 
 **Implementation Strategy:**
-- Calculate both grade sets during Phase 2.5.1
+- Calculate both grade sets during Phase 2.7.1
 - Test normality of each stat (Shapiro-Wilk, skewness)
 - Evaluate which method produces more accurate/useful grades
 - Consider hybrid: SD for normal stats, percentile for skewed stats
@@ -622,15 +685,51 @@ ORDER BY e.embedding <=> query_embedding  -- Semantic ranking
 - Flexible: Can adjust thresholds based on data
 
 **Migration:**
-- Current grades remain functional until Phase 2.5.1
+- Current grades remain functional until Phase 2.7.1
 - Backward compatible: Grade columns stay, just calculated differently
 - Re-run ETL to backfill historical data with percentile-based grades
+
+### 11. **Two-Stage Retrieval (FTS + Reranking)** ⭐ PHASE 2
+**Rationale:**
+- Single-stage retrieval has fundamental limitations:
+  - **Bi-encoders** (current): Fast but can't distinguish opposites, handle negation poorly
+  - **Short queries**: Match terse descriptions due to length normalization bias
+  - **Structural similarity**: Template uniformity dominates semantic differences
+
+**Solution: Two-stage pipeline**
+1. **Stage 1 - Fast Retrieval (FTS or Vector):**
+   - Goal: High recall, get 50-100 candidates quickly
+   - Short queries (≤4 tokens): Use PostgreSQL FTS (keyword matching)
+   - Long queries (>4 tokens): Use vector search (semantic similarity)
+   - Apply SQL filters (position, grades, years)
+   
+2. **Stage 2 - Precise Reranking (Cross-Encoder):**
+   - Goal: High precision, score top 10 accurately
+   - Cross-encoder sees query + document together
+   - Full attention mechanism reasons about relationships
+   - Can handle negation, opposites, multi-constraint queries
+
+**Benefits:**
+- Solves "all time great" vs "replacement level" confusion
+- Handles complex queries: "power WITHOUT speed", "elite defense BUT poor offense"
+- Respects exact phrases via FTS
+- Best of both worlds: speed + accuracy
+
+**Performance:**
+- Stage 1: ~50ms (FTS or vector search)
+- Stage 2: ~500ms (rerank 50 candidates)
+- Total: <1 second (acceptable UX)
+
+**Trade-offs:**
+- More complex architecture (three search methods: FTS, vector, cross-encoder)
+- Additional model to load (~80MB cross-encoder)
+- Worth it for dramatically better search quality
 
 ---
 
 ## Database Schema
 
-### Version 1.3 (Planned - Phase 2.5)
+### Version 1.4 (Planned - Phase 2.7)
 
 #### `stat_percentiles`
 Pre-calculated percentile thresholds for fast player ranking across three scopes.
@@ -688,7 +787,7 @@ The 20-80 scale was originally based on standard deviations from the mean:
 - **Baseball reality**: Many stats are NOT normally distributed (HR, SB are right-skewed; AVG is bounded)
 
 **Implementation Plan:**
-- [ ] Calculate grades using both methods during Phase 2.5.1
+- [ ] Calculate grades using both methods during Phase 2.7.1
 - [ ] Store both sets of grades temporarily: `power_grade_pct`, `power_grade_sd`
 - [ ] Evaluate which approach produces more accurate/useful grades:
   - Check grade distributions (2% vs 10% with 70+ grades)
@@ -752,7 +851,7 @@ One row per player per season with batting statistics **and grades**.
 - Plus stats (era-adjusted): `avg_plus`, `iso_plus`, `bb_pct_plus`, `k_pct_plus`, etc.
 - Batted ball: `gb_pct`, `fb_pct`, `ld_pct`, `hard_pct`
 - Statcast (2015+): `ev`, `ev90`, `la`, `barrel_pct`, `maxev`
-- **Grades (20-80 scale)**: ⭐ CURRENT (Plus-stat based, to be revised in Phase 2.5.1)
+- **Grades (20-80 scale)**: ⭐ CURRENT (Plus-stat based, to be revised in Phase 2.7.1)
   - `overall_grade` - WAR-based
   - `offense_grade` - wRC+ based
   - `power_grade` - ISO+ based
@@ -763,7 +862,7 @@ One row per player per season with batting statistics **and grades**.
   - `fielding_grade` - Era/position adjusted
   - `hard_contact_grade` - Hard Hit%+ (2015+)
   - `exit_velo_grade` - EV90 (2015+)
-- **Percentiles (0-100)**: ⭐ PLANNED (Phase 2.5.1)
+- **Percentiles (0-100)**: ⭐ PLANNED (Phase 2.7.1)
   - `overall_percentile` - WAR percentile
   - `offense_percentile` - wRC+ percentile
   - `power_percentile` - ISO percentile
@@ -778,7 +877,7 @@ One row per player per season with batting statistics **and grades**.
 **Indexes:**
 - `fangraphs_id`, `year`, `war DESC`, `wrc_plus DESC`, `position`
 - **Grade indexes**: `overall_grade`, `power_grade`, `hit_grade`, `fielding_grade`
-- **Percentile indexes** (Phase 2.5.1): `overall_percentile`, `power_percentile`, `hit_percentile`, `fielding_percentile`
+- **Percentile indexes** (Phase 2.7.1): `overall_percentile`, `power_percentile`, `hit_percentile`, `fielding_percentile`
 
 #### `fg_batter_pitches_faced`
 Pitch-level data for what batters faced (optional, very granular).
@@ -799,20 +898,22 @@ Vector embeddings for semantic search of player seasons.
 - `year` - Season year
 - `embedding_type` - 'season_summary', 'career_summary', 'pitch_profile'
 - `summary_text` - Natural language description that was embedded
+- `summary_tsv` - tsvector for full-text search (Phase 2.1)
 - `embedding` - 768-dimensional vector (all-mpnet-base-v2)
 - `metadata` - JSONB with key stats for filtering
 
 **Indexes:**
 - HNSW index on embedding vector
+- GIN index on summary_tsv (Phase 2.1)
 - Indexes on type, player, year
 - GIN index on metadata JSONB
 
 #### Future Tables
 - ~~`player_embeddings`~~ ✅ COMPLETE - Vector embeddings for semantic search
+- `stat_percentiles` - Pre-calculated percentile distributions (Phase 2.7)
 - `fg_pitcher_stats` - Pitcher statistics
 - `bref_players` - Baseball Reference biographical data
 - `statcast_metrics` - Aggregated Statcast data
-- `stat_percentiles` - Pre-calculated percentile distributions (Phase 2.5)
 
 ---
 
@@ -914,12 +1015,19 @@ LIMIT 10;
 - Indexes on all foreign keys
 - Composite indexes on common query patterns
 - HNSW index on vector embeddings (fast similarity search)
+- GIN index on tsvector for full-text search (Phase 2.1)
 - Connection pooling in application
 
 ### Embeddings
 - Batch generation (100-500 at a time)
 - Cache embeddings, regenerate only on data changes
 - Consider quantization for production
+
+### Search (Phase 2)
+- FTS queries: ~10-50ms (GIN index)
+- Vector queries: ~50-100ms (HNSW index)
+- Cross-encoder reranking: ~10ms per candidate, ~500ms for 50 candidates
+- Total two-stage retrieval: <1 second
 
 ### LLM
 - Stream responses to user (don't wait for full completion)
@@ -934,11 +1042,20 @@ LIMIT 10;
 - Validate FanGraphs data completeness (no missing seasons)
 - Check for statistical outliers (sanity checks)
 - Verify player ID linkages across tables
+- Validate percentile distributions (Phase 2.7)
+- Test grade calculation methodologies (Phase 2.7)
 
 ### Embedding Quality
 - Manual review of similar player results
 - Test queries with known similar players
 - Measure retrieval precision/recall
+
+### Search Quality (Phase 2)
+- Test FTS with short queries ("all time great")
+- Test semantic search with long queries ("power hitter with plate discipline")
+- Test reranking improvement (before/after comparison)
+- Test negation handling ("power WITHOUT speed")
+- Test opposite distinction ("all time great" vs "replacement level")
 
 ### LLM Integration
 - Test tool calling accuracy
@@ -957,6 +1074,7 @@ LIMIT 10;
 ### Scalability
 - Current design handles ~15,000 player-seasons easily
 - PGVector scales to millions of embeddings
+- PostgreSQL FTS scales to millions of documents
 - Consider read replicas if query volume increases
 
 ### Data Freshness
@@ -992,22 +1110,32 @@ LIMIT 10;
 8. **Join to stats table, don't use JSONB metadata:** Leverages indexes, faster, type-safe
 9. **Position descriptions matter:** "at catcher" vs "catcher" affects embedding quality
 10. **Grade distribution validation catches errors:** Immediately see if grading thresholds are wrong
+11. **Length normalization bias in semantic search:** Sparse embeddings (short descriptions) match sparse queries better than dense embeddings (long descriptions), even when semantically opposite. Short queries should use FTS instead of vector search.
+12. **Query-document asymmetry:** Short queries (3-5 tokens) embed poorly against long documents (50+ tokens) due to structural mismatch. Solutions: FTS for short queries, LLM query expansion for medium queries, semantic search only for detailed queries.
+13. **Bi-encoders can't distinguish opposites:** Embedding models measure distributional similarity (words appearing in similar contexts), NOT logical meaning. "All-time great season" and "replacement level season" appear similar because they share sentence structure. Cross-encoder reranking solves this by encoding query+document together.
+14. **"Semantic search" is a misnomer:** The term implies understanding of meaning, but embeddings actually measure contextual/distributional similarity. They excel at clustering concepts expressed with different vocabulary, but fail at logical operations (negation, contradiction, opposites). This is why "all time great" matches "replacement level" - they appear in similar sentence structures.
 
-### Phase 2.5 (Percentile Rankings) - Future
-11. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
-12. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
-13. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
-14. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
-15. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+### Phase 2.7 (Percentile Rankings) - Future
+15. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+16. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+17. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+18. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+19. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+
+### Phase 2 (Enhanced Retrieval) - Future
+20. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
+21. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
+22. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
+23. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
 
 ---
 
 ## Contact & Resources
 
 ### Documentation
-- FanGraphs schema: `fangraphs_schema.sql` (v1.2)
+- FanGraphs schema: `fangraphs_schema.sql` (v1.2, will become v1.4 in Phase 2.7)
 - ETL script: `batter_leaderboard_etl.r`
-- Embedding system: `index.ts`
+- Embedding system: `baseball-embeddings/src/index.ts`
 - Project spec: This document
 
 ### Key Files
@@ -1020,7 +1148,7 @@ baseball-rag/
 │   ├── tsconfig.json
 │   └── src/
 │       └── index.ts             # Embedding generation + hybrid search
-└── PROJECT_SPEC.md              # This document
+└── PROJECT_SPEC.md              # This document (v1.4)
 ```
 
 ### External Resources
@@ -1029,6 +1157,8 @@ baseball-rag/
 - PGVector: https://github.com/pgvector/pgvector
 - Ollama: https://ollama.ai/
 - transformers.js: https://huggingface.co/docs/transformers.js
+- PostgreSQL Full-Text Search: https://www.postgresql.org/docs/current/textsearch.html
+- Cross-Encoders: https://www.sbert.net/examples/applications/cross-encoder/README.html
 
 ---
 
