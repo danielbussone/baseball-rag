@@ -23,7 +23,7 @@ export class OllamaService {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama3.1:8b',
+        model: 'llama3.2',
         messages,
         tools,
         stream: false
@@ -36,4 +36,5 @@ export class OllamaService {
 
     return response.json();
   }
+  
 }

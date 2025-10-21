@@ -20,6 +20,8 @@ export async function getPlayerStats(
   }
   
   sql += ` ORDER BY s.year DESC`;
+
+  console.log(`Get Player Stats Query: ${sql}`);
   
   const result = await pool.query(sql, params);
   return result.rows;
@@ -34,7 +36,7 @@ export async function getCareerSummary(playerName: string): Promise<{
     hr: number;
     sb: number;
     totalWAR: number;
-    avgWRC: number;
+    avgWRCPlus: number;
     peakWAR: number;
     peakYear: number;
   };
@@ -43,19 +45,32 @@ export async function getCareerSummary(playerName: string): Promise<{
   
   if (seasons.length === 0) {
     throw new Error(`No stats found for player: ${playerName}`);
+  } else {
+    console.log(`Found ${seasons.length} seasons`);
   }
+
+  const totalWAR = seasons.reduce((sum, s) => sum + Number(s.war), 0)
+  const totalWARStr = Number(totalWAR).toFixed(1)
+  const peakWAR = Math.max(...seasons.map(s => Number(s.war)))
+  const peakYear = seasons.find(s => Number(s.war) === peakWAR)?.year || 0
+
+  console.log(`Total WAR ${totalWARStr}, Peak WAR ${peakWAR}, Peak Year ${peakYear}`)
   
   const totals = {
     seasons: seasons.length,
-    games: seasons.reduce((sum, s) => sum + s.g, 0),
-    pa: seasons.reduce((sum, s) => sum + s.pa, 0),
-    hr: seasons.reduce((sum, s) => sum + s.hr, 0),
-    sb: seasons.reduce((sum, s) => sum + s.sb, 0),
-    totalWAR: seasons.reduce((sum, s) => sum + s.war, 0),
-    avgWRC: seasons.reduce((sum, s) => sum + s.wrc_plus, 0) / seasons.length,
-    peakWAR: Math.max(...seasons.map(s => s.war)),
-    peakYear: seasons.find(s => s.war === Math.max(...seasons.map(s => s.war)))?.year || 0
+    games: seasons.reduce((sum, s) => sum + Number(s.g), 0),
+    pa: seasons.reduce((sum, s) => sum + Number(s.pa), 0),
+    hr: seasons.reduce((sum, s) => sum + Number(s.hr), 0),
+    sb: seasons.reduce((sum, s) => sum + Number(s.sb), 0),
+    totalWAR: totalWAR,
+    avgWRCPlus: seasons.reduce((sum, s) => sum + Number(s.wrc_plus), 0) / seasons.length,
+    peakWAR: peakWAR,
+    peakYear: peakYear
   };
+
+  console.log(`Seasons: ${JSON.stringify(seasons, null, 2)}`);
+
+  console.log(`Totals: ${JSON.stringify(totals, null, 2)}`);
   
   return { seasons, totals };
 }

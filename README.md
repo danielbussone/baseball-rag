@@ -1,8 +1,8 @@
 # Baseball RAG Agent - Project Specification
 
-**Version:** 1.4  
-**Last Updated:** October 20, 2025  
-**Status:** Phase 1 Complete (ETL + Embeddings), Moving to Phase 1.3 (LLM Integration)
+**Version:** 1.4
+**Last Updated:** October 21, 2025
+**Status:** Phase 1.3 Complete (LLM Integration with known issues), Moving to Phase 1.4 (Backend API)
 
 ---
 
@@ -127,7 +127,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 ## Feature Breakdown
 
 ### Phase 1: MVP (Core RAG Functionality)
-**Status:** ETL ✅, Embeddings ✅, Moving to LLM Integration
+**Status:** ETL ✅, Embeddings ✅, LLM Integration ✅ (with known issues)
 
 #### 1.1 Data Pipeline ✅ COMPLETE (Grades Pending Revision)
 - [x] FanGraphs batter leaderboards (1988-2025)
@@ -146,16 +146,23 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [x] Test semantic search quality
 - [x] **Hybrid search implementation** (semantic + SQL filters on grades)
 
-#### 1.3 LLM Integration (In Progress)
-- [ ] Set up Ollama with appropriate model
-- [ ] Implement tool/function calling
-- [ ] Create basic tools:
+#### 1.3 LLM Integration ✅ COMPLETE (with known issues)
+- [x] Set up Ollama with appropriate model
+- [x] Implement tool/function calling
+- [x] Create basic tools:
   - `search_similar_players(query, filters)` - Hybrid semantic search
   - `get_player_stats(player_name, year)` - Fetch specific stats
   - `compare_players(player1, player2)` - Side-by-side comparison
   - `get_career_summary(player_name)` - Career aggregates
   - `get_player_percentiles(player_name, year?, scope?)` - Percentile rankings (Phase 2.7)
   - `compare_player_percentiles(player1, player2, scope?)` - Percentile comparison (Phase 2.7)
+
+**Known Issues (To Be Fixed):**
+- [ ] Similar players search filters not working correctly
+- [ ] Tool function parameter ordering issue (no clear definition found)
+- [ ] Career summary aggregating season stats in code instead of using career view
+- [ ] Prompt needs iteration for better stat formatting and presentation
+- [ ] Scouting grade qualitative descriptors needed (currently copy/pasting examples)
 
 #### 1.4 Backend API
 - [ ] Express/Fastify server
@@ -921,25 +928,31 @@ Vector embeddings for semantic search of player seasons.
 
 ### Current Phase Checklist
 
-**Phase 1.3: LLM Integration (Current)**
-1. Install and configure Ollama locally
-2. Choose model (llama3.1:8b or qwen2.5:14b)
-3. Create tool definitions:
-   - `search_similar_players()` - wraps hybrid search
-   - `get_player_stats()` - fetch specific season
-   - `compare_players()` - side-by-side comparison
-4. Implement tool calling loop
-5. Test with example queries:
-   - "Compare Mike Trout and Ken Griffey Jr"
-   - "Find elite defensive shortstops from 2010-2020"
-   - "Show me power hitters with poor defense"
+**Phase 1.3: LLM Integration ✅ COMPLETE**
+1. ✅ Install and configure Ollama locally
+2. ✅ Choose model (llama3.1:8b or qwen2.5:14b)
+3. ✅ Create tool definitions:
+   - ✅ `search_similar_players()` - wraps hybrid search
+   - ✅ `get_player_stats()` - fetch specific season
+   - ✅ `compare_players()` - side-by-side comparison
+   - ✅ `get_career_summary()` - career aggregates
+4. ✅ Implement tool calling loop
+5. ✅ Test with example queries
+
+**Phase 1.4: Backend API (Current)**
+1. Set up Express/Fastify server
+2. Implement `/chat` endpoint with streaming responses
+3. Configure PostgreSQL connection pooling
+4. Add error handling and logging
+5. Integrate Ollama with TypeScript backend
 
 ### Running the Project (Current State)
 
 #### Prerequisites
 - Docker Desktop (for PostgreSQL)
 - R 4.x+ with packages: `baseballr`, `DBI`, `RPostgres`, `dplyr`
-- Node.js 18+ (for TypeScript embedding system)
+- Node.js 18+ (for TypeScript backend and embedding system)
+- Ollama (for local LLM)
 
 #### Setup Database
 ```bash
@@ -970,8 +983,9 @@ Rscript batter_leaderboard_etl.r
 
 #### Generate Embeddings
 ```bash
-cd baseball-embeddings
+cd embeddings
 npm install
+npm run build     # Compile TypeScript
 npm run generate  # Generates embeddings for all seasons (~15-20 minutes)
 ```
 
@@ -984,6 +998,18 @@ npm start test "elite power hitter"
 npm start hybrid "slugging first baseman" --position=1B --minPowerGrade=60 --maxFieldingGrade=40
 npm start hybrid "defensive wizard" --position=SS --minFieldingGrade=70
 npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --minFieldingGrade=60
+```
+
+#### Run LLM Chat (Phase 1.3)
+```bash
+cd backend
+npm install
+npm run dev  # Start the chat interface
+
+# Example queries:
+# - "Compare Mike Trout and Ken Griffey Jr"
+# - "Tell me about Mookie Betts' 2024 season"
+# - "Find power hitters with elite defense"
 ```
 
 #### Verify Data
@@ -1114,19 +1140,27 @@ LIMIT 10;
 12. **Query-document asymmetry:** Short queries (3-5 tokens) embed poorly against long documents (50+ tokens) due to structural mismatch. Solutions: FTS for short queries, LLM query expansion for medium queries, semantic search only for detailed queries.
 13. **Bi-encoders can't distinguish opposites:** Embedding models measure distributional similarity (words appearing in similar contexts), NOT logical meaning. "All-time great season" and "replacement level season" appear similar because they share sentence structure. Cross-encoder reranking solves this by encoding query+document together.
 14. **"Semantic search" is a misnomer:** The term implies understanding of meaning, but embeddings actually measure contextual/distributional similarity. They excel at clustering concepts expressed with different vocabulary, but fail at logical operations (negation, contradiction, opposites). This is why "all time great" matches "replacement level" - they appear in similar sentence structures.
+15. **Modular TypeScript structure improves maintainability:** Refactored embedding system from single 895-line file into 18 organized modules. Each interface in its own file, clear separation of concerns (types, constants, config, utils, services, commands). Dramatically easier to navigate, test, and extend. Follow industry best practices: single responsibility, separation of concerns, dependency injection.
+
+### Phase 1.3 (LLM Integration) - Complete
+16. **Tool function parameter ordering matters:** Encountered issues where LLM-provided parameter order didn't match function definitions, but no clear OpenAI function calling spec for parameter ordering found. May need explicit parameter validation.
+17. **LLM prompt engineering is iterative:** Initial prompts work but need refinement for better stat formatting and presentation to user.
+18. **Scouting grade qualitative descriptors needed:** LLM tends to copy/paste examples from system prompt even when not perfectly applicable. Need better grade-to-description mappings.
+19. **Career aggregations should use database views:** Currently aggregating season stats in code for `get_career_summary()`. Should leverage `fg_career_stats` view for consistency and performance.
+20. **Search filter parameter extraction is fragile:** LLM doesn't always extract filters correctly from natural language queries (e.g., "similar players with power" not triggering power filter). May need more explicit prompt guidance or examples.
 
 ### Phase 2.7 (Percentile Rankings) - Future
-15. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
-16. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
-17. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
-18. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
-19. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+21. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+22. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+23. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+24. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+25. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
 
 ### Phase 2 (Enhanced Retrieval) - Future
-20. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
-21. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
-22. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
-23. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
+26. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
+27. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
+28. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
+29. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
 
 ---
 
@@ -1135,7 +1169,7 @@ LIMIT 10;
 ### Documentation
 - FanGraphs schema: `fangraphs_schema.sql` (v1.2, will become v1.4 in Phase 2.7)
 - ETL script: `batter_leaderboard_etl.r`
-- Embedding system: `baseball-embeddings/src/index.ts`
+- Embedding system: `embeddings/src/` (modular TypeScript architecture)
 - Project spec: This document
 
 ### Key Files
@@ -1143,12 +1177,52 @@ LIMIT 10;
 baseball-rag/
 ├── fangraphs_schema.sql         # Database schema v1.2
 ├── batter_leaderboard_etl.r     # R ETL with grade calculation
-├── baseball-embeddings/
+├── embeddings/                  # TypeScript embedding system (refactored)
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── src/
-│       └── index.ts             # Embedding generation + hybrid search
-└── PROJECT_SPEC.md              # This document (v1.4)
+│       ├── index.ts             # CLI entry point
+│       ├── types/               # TypeScript interfaces
+│       │   ├── SeasonStats.ts
+│       │   ├── PlayerGrades.ts
+│       │   ├── EmbeddingRecord.ts
+│       │   ├── SearchFilters.ts
+│       │   └── index.ts         # Type barrel export
+│       ├── constants/
+│       │   └── grading.ts       # Grade descriptors (20-80 scale)
+│       ├── config/
+│       │   └── database.ts      # PostgreSQL pool & table verification
+│       ├── utils/
+│       │   ├── position.ts      # Position helpers & fielding descriptions
+│       │   ├── grading.ts       # Grade calculation & WAR/wRC+ descriptions
+│       │   └── text.ts          # Text utilities
+│       ├── services/
+│       │   ├── embedding.ts     # Transformers.js model & generation
+│       │   ├── database.ts      # DB queries (fetch seasons, save embeddings)
+│       │   └── summary.ts       # Season summary generation
+│       └── commands/
+│           ├── generate.ts      # Generate all embeddings
+│           ├── test.ts          # Test similarity search
+│           ├── hybrid.ts        # Hybrid search with filters
+│           └── sample.ts        # Generate sample summaries
+├── backend/                     # TypeScript backend with LLM integration
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts             # CLI entry point
+│       ├── types/
+│       │   └── index.ts         # Interface types
+│       ├── services/
+│       │   ├── chat.ts          # LLM orchestration & tool calling
+│       │   ├── ollama.ts        # Ollama API client
+│       │   └── embedding.ts     # Embedding service
+│       └── tools/
+│           ├── index.ts         # Tool definitions export
+│           ├── definitions.ts   # tool definitions
+│           ├── search.ts        # search_similar_players tool
+│           ├── player-stats.ts  # get_player_stats & get_career_summary tools
+│           └── compare.ts       # compare_players tool (future)
+└── README.md                    # This document (v1.4)
 ```
 
 ### External Resources

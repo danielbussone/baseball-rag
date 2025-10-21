@@ -1,51 +1,150 @@
 import { pool } from '../services/database.js';
-import { SeasonStats, SearchFilters } from '../types/index.js';
+import type { SearchFilters } from '../types/index.js';
+import { generateEmbedding } from '../services/embedding.js';
+
+export interface HybridSearchResult {
+  summary_text: string;
+  year: number;
+  player_name: string;
+  position: string;
+  war: number;
+  wrc_plus: number;
+  overall_grade: number;
+  power_grade: number;
+  hit_grade: number;
+  fielding_grade: number;
+  speed_grade: number;
+  similarity: number;
+}
 
 export async function searchSimilarPlayers(
-  query: string, 
   filters: SearchFilters = {},
-  limit: number = 10
-): Promise<SeasonStats[]> {
-  let sql = `
-    SELECT DISTINCT s.*
+  limit: number = 10,
+  queryText: string
+): Promise<HybridSearchResult[]> {
+  // Generate query embedding
+  const queryEmbedding = await generateEmbedding(queryText);
+  console.log(`Query Text: ${queryText}`)
+  console.log(`Search Filters: ${JSON.stringify(filters)}`)
+  console.log(`Limit: ${limit}`)
+
+  // Build WHERE clause from filters
+  const whereClauses: string[] = ["embedding_type = 'season_summary'"];
+  const params: any[] = [JSON.stringify(queryEmbedding), limit];
+  let paramIndex = 3;
+
+  if (filters.position) {
+    whereClauses.push(`s.position ILIKE $${paramIndex}`);
+    params.push(`%${filters.position}%`);
+    paramIndex++;
+  }
+
+  if (filters.minWAR !== undefined) {
+    whereClauses.push(`s.war >= $${paramIndex}`);
+    params.push(filters.minWAR);
+    paramIndex++;
+  }
+
+  if (filters.maxWAR !== undefined) {
+    whereClauses.push(`s.war <= $${paramIndex}`);
+    params.push(filters.maxWAR);
+    paramIndex++;
+  }
+
+  if (filters.minOverallGrade !== undefined) {
+    whereClauses.push(`s.overall_grade >= $${paramIndex}`);
+    params.push(filters.minOverallGrade);
+    paramIndex++;
+  }
+
+  if (filters.maxOverallGrade !== undefined) {
+    whereClauses.push(`s.overall_grade <= $${paramIndex}`);
+    params.push(filters.maxOverallGrade);
+    paramIndex++;
+  }
+
+  if (filters.minHitGrade !== undefined) {
+    whereClauses.push(`s.hit_grade >= $${paramIndex}`);
+    params.push(filters.minHitGrade);
+    paramIndex++;
+  }
+
+  if (filters.maxHitGrade !== undefined) {
+    whereClauses.push(`s.hit_grade <= $${paramIndex}`);
+    params.push(filters.maxHitGrade);
+    paramIndex++;
+  }
+
+  if (filters.minPowerGrade !== undefined) {
+    whereClauses.push(`s.power_grade >= $${paramIndex}`);
+    params.push(filters.minPowerGrade);
+    paramIndex++;
+  }
+
+  if (filters.maxPowerGrade !== undefined) {
+    whereClauses.push(`s.power_grade <= $${paramIndex}`);
+    params.push(filters.maxPowerGrade);
+    paramIndex++;
+  }
+
+  if (filters.minFieldingGrade !== undefined) {
+    whereClauses.push(`s.fielding_grade >= $${paramIndex}`);
+    params.push(filters.minFieldingGrade);
+    paramIndex++;
+  }
+
+  if (filters.maxFieldingGrade !== undefined) {
+    whereClauses.push(`s.fielding_grade <= $${paramIndex}`);
+    params.push(filters.maxFieldingGrade);
+    paramIndex++;
+  }
+
+  if (filters.minSpeedGrade !== undefined) {
+    whereClauses.push(`s.speed_grade >= $${paramIndex}`);
+    params.push(filters.minSpeedGrade);
+    paramIndex++;
+  }
+
+  if (filters.maxSpeedGrade !== undefined) {
+    whereClauses.push(`s.speed_grade <= $${paramIndex}`);
+    params.push(filters.maxSpeedGrade);
+    paramIndex++;
+  }
+
+  if (filters.yearRange) {
+    whereClauses.push(`s.year BETWEEN $${paramIndex} AND $${paramIndex + 1}`);
+    params.push(filters.yearRange[0], filters.yearRange[1]);
+    paramIndex += 2;
+  }
+
+  const whereClause = whereClauses.join(' AND ');
+
+  const query = `
+    SELECT
+      e.summary_text,
+      s.year,
+      p.player_name,
+      s.position,
+      s.war,
+      s.wrc_plus,
+      s.overall_grade,
+      s.power_grade,
+      s.hit_grade,
+      s.fielding_grade,
+      s.speed_grade,
+      1 - (e.embedding <=> $1::vector) AS similarity
     FROM player_embeddings e
     JOIN fg_season_stats s ON e.player_season_id = s.player_season_id
     JOIN fg_players p ON s.fangraphs_id = p.fangraphs_id
-    WHERE e.embedding_type = 'season_summary'
+    WHERE ${whereClause}
+    ORDER BY e.embedding <=> $1::vector
+    LIMIT $2
   `;
-  
-  const params: any[] = [];
-  let paramCount = 0;
 
-  // Apply filters
-  if (filters.position) {
-    sql += ` AND s.position ILIKE $${++paramCount}`;
-    params.push(`%${filters.position}%`);
-  }
+  console.log(`Query: ${query}`)
   
-  if (filters.minOverallGrade) {
-    sql += ` AND s.overall_grade >= $${++paramCount}`;
-    params.push(filters.minOverallGrade);
-  }
-  
-  if (filters.minPowerGrade) {
-    sql += ` AND s.power_grade >= $${++paramCount}`;
-    params.push(filters.minPowerGrade);
-  }
-  
-  if (filters.maxFieldingGrade) {
-    sql += ` AND s.fielding_grade <= $${++paramCount}`;
-    params.push(filters.maxFieldingGrade);
-  }
-  
-  if (filters.yearRange) {
-    sql += ` AND s.year BETWEEN $${++paramCount} AND $${++paramCount}`;
-    params.push(filters.yearRange[0], filters.yearRange[1]);
-  }
+  console.log(`Params: ${JSON.stringify(params)}`)
 
-  sql += ` ORDER BY s.war DESC LIMIT $${++paramCount}`;
-  params.push(limit);
-
-  const result = await pool.query(sql, params);
-  return result.rows;
+  const result = await pool.query(query, params);
+  return result.rows as HybridSearchResult[];
 }
