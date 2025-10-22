@@ -1,4 +1,6 @@
-# Compare Players
+# LLM Tools
+
+## Compare Players
 
 ### Input
 ```
@@ -38,7 +40,7 @@ In terms of advanced metrics, Mike Trout has a slight edge in WAR and WRC+ due t
 
 --------------------------------------------------------------------------------------------------------
 
-# Player Characteristics Search
+## Player Characteristics Search
 
 ### Input
 ```
@@ -58,7 +60,7 @@ These players are all above the elite grade threshold of 80.
 
 --------------------------------------------------------------------------------------------------------
 
-# Player Summary
+## Player Summary
 
 ### Input
 ```
@@ -77,7 +79,7 @@ Betts's overall grade is 55, indicating that he is among the best players in bas
 
 --------------------------------------------------------------------------------------------------------
 
-# Player Season Stats
+## Player Season Stats
 
 ### Input
 ```
