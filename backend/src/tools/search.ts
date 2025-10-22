@@ -1,5 +1,5 @@
 import { pool } from '../services/database.js';
-import type { SearchFilters } from '../types/index.js';
+import type { SearchFilters } from '../types';
 import { generateEmbedding } from '../services/embedding.js';
 
 export interface HybridSearchResult {
@@ -17,14 +17,21 @@ export interface HybridSearchResult {
   similarity: number;
 }
 
-export async function searchSimilarPlayers(
-  filters: SearchFilters = {},
-  limit: number = 10,
-  queryText: string
-): Promise<HybridSearchResult[]> {
+// Instead of positional: searchSimilarPlayers(filters, limit, queryText)
+// Use object destructuring:
+export async function searchSimilarPlayers({
+                                             query,
+                                             filters = {},
+                                             limit = 10
+                                           }: {
+  query: string;
+  filters?: SearchFilters;
+  limit?: number;
+}): Promise<HybridSearchResult[]>
+ {
   // Generate query embedding
-  const queryEmbedding = await generateEmbedding(queryText);
-  console.log(`Query Text: ${queryText}`)
+  const queryEmbedding = await generateEmbedding(query);
+  console.log(`Query Text: ${query}`)
   console.log(`Search Filters: ${JSON.stringify(filters)}`)
   console.log(`Limit: ${limit}`)
 
@@ -119,7 +126,7 @@ export async function searchSimilarPlayers(
 
   const whereClause = whereClauses.join(' AND ');
 
-  const query = `
+  const sql = `
     SELECT
       e.summary_text,
       s.year,
@@ -141,10 +148,10 @@ export async function searchSimilarPlayers(
     LIMIT $2
   `;
 
-  console.log(`Query: ${query}`)
+  console.log(`Query: ${sql}`)
   
   console.log(`Params: ${JSON.stringify(params)}`)
 
-  const result = await pool.query(query, params);
+  const result = await pool.query(sql, params);
   return result.rows as HybridSearchResult[];
 }

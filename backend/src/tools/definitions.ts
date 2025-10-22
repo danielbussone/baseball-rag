@@ -15,9 +15,18 @@ export const toolDefinitions = [
             type: 'object',
             properties: {
               position: { type: 'string', description: 'Player position (e.g., "1B", "SS", "OF")' },
+              minWAR: { type: 'number', description: 'Minimum Wins Above Replacement value' },
+              maxWAR: { type: 'number', description: 'Maximum Wins Above Replacement value' },
               minOverallGrade: { type: 'number', description: 'Minimum overall grade (20-80 scale)' },
+              maxOverallGrade: { type: 'number', description: 'Maximum overall grade (20-80 scale)' },
+              minHitGrade: { type: 'number', description: 'Minimum hit grade (20-80 scale)' },
+              maxHitGrade: { type: 'number', description: 'Maximum hit grade (20-80 scale)' },
               minPowerGrade: { type: 'number', description: 'Minimum power grade (20-80 scale)' },
+              maxPowerGrade: { type: 'number', description: 'Maximum power grade (20-80 scale)' },
+              minFieldingGrade: { type: 'number', description: 'Minimum fielding grade (20-80 scale)' },
               maxFieldingGrade: { type: 'number', description: 'Maximum fielding grade (20-80 scale)' },
+              minSpeedGrade: { type: 'number', description: 'Minimum speed grade (20-80 scale)' },
+              maxSpeedGrade: { type: 'number', description: 'Maximum speed grade (20-80 scale)' },
               yearRange: { 
                 type: 'array', 
                 items: { type: 'number' },

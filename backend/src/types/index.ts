@@ -48,12 +48,15 @@ export interface SearchFilters {
 }
 
 export interface ToolCall {
-  name: string;
-  parameters: Record<string, any>;
+  type: string
+  function: {
+    name: string
+    arguments: Record<string, any>
+  }
 }
 
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'tool';
+  role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   tool_calls?: ToolCall[];
 }
