@@ -1,5 +1,8 @@
 import { pool } from '../services/database.js';
 import { CareerStats, SeasonStats } from '../types/index.js';
+import { createModuleLogger } from '../config/logger.js';
+
+const logger = createModuleLogger('PlayerStatsTool');
 
 export async function getPlayerStats(
   playerName: string, 
@@ -21,7 +24,7 @@ export async function getPlayerStats(
   
   sql += ` ORDER BY s.year DESC`;
 
-  console.log(`Get Player Stats Query: ${sql}`);
+  logger.debug(`Get Player Stats Query: ${sql}`);
   
   const result = await pool.query(sql, params);
   return result.rows;
@@ -36,7 +39,7 @@ export async function getPlayerCareerStats(playerName: string): Promise<CareerSt
   
   const params: any[] = [`%${playerName}%`];
 
-  console.log(`Get Player Career Stats Query: ${sql}`);
+  logger.debug(`Get Player Career Stats Query: ${sql}`);
   
   const result = await pool.query(sql, params);
   return result.rows[0];
@@ -50,9 +53,9 @@ export async function getCareerSummary(playerName: string): Promise<{
   
   const career = await getPlayerCareerStats(playerName);
 
-  console.log(`Seasons: ${JSON.stringify(seasons, null, 2)}`);
+  logger.debug(`Seasons: ${JSON.stringify(seasons, null, 2)}`);
 
-  console.log(`Career: ${JSON.stringify(career, null, 2)}`);
+  logger.debug(`Career: ${JSON.stringify(career, null, 2)}`);
   
   return { seasons, career };
 }

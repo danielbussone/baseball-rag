@@ -1,6 +1,9 @@
 import { pool } from '../services/database.js';
 import type { SearchFilters } from '../types';
 import { generateEmbedding } from '../services/embedding.js';
+import { createModuleLogger } from '../config/logger.js';
+
+const logger = createModuleLogger('SearchTool');
 
 export interface HybridSearchResult {
   summary_text: string;
@@ -24,9 +27,9 @@ export async function searchSimilarPlayers(
   query: string
 ): Promise<HybridSearchResult[]> {
 
-  console.log(`Query Text: ${query}`)
-  console.log(`Search Filters: ${JSON.stringify(filters)}`)
-  console.log(`Limit: ${limit}`)
+  logger.debug(`Query Text: ${query}`)
+  logger.debug(`Search Filters: ${JSON.stringify(filters)}`)
+  logger.debug(`Limit: ${limit}`)
   
   // Generate query embedding
   const queryEmbedding = await generateEmbedding(query);
@@ -37,7 +40,7 @@ export async function searchSimilarPlayers(
   let paramIndex = 3;
 
   if (filters.position) {
-    console.log(`Position filter: ${filters.position}`)
+    logger.debug(`Position filter: ${filters.position}`)
     whereClauses.push(`s.position ILIKE $${paramIndex}`);
     params.push(`%${filters.position}%`);
     paramIndex++;
@@ -80,14 +83,14 @@ export async function searchSimilarPlayers(
   }
 
   if (filters.minPowerGrade !== undefined) {
-    console.log(`Min Power filter: ${filters.minPowerGrade}`)
+    logger.debug(`Min Power filter: ${filters.minPowerGrade}`)
     whereClauses.push(`s.power_grade >= $${paramIndex}`);
     params.push(filters.minPowerGrade);
     paramIndex++;
   }
 
   if (filters.maxPowerGrade !== undefined) {
-    console.log(`Max Power filter: ${filters.maxPowerGrade}`)
+    logger.debug(`Max Power filter: ${filters.maxPowerGrade}`)
     whereClauses.push(`s.power_grade <= $${paramIndex}`);
     params.push(filters.maxPowerGrade);
     paramIndex++;
@@ -118,7 +121,7 @@ export async function searchSimilarPlayers(
   }
 
   if (filters.yearRange) {
-    console.log(`Years filter: ${filters.yearRange}`)
+    logger.debug(`Years filter: ${filters.yearRange}`)
     whereClauses.push(`s.year BETWEEN $${paramIndex} AND $${paramIndex + 1}`);
     params.push(filters.yearRange[0], filters.yearRange[1]);
     paramIndex += 2;
@@ -148,9 +151,9 @@ export async function searchSimilarPlayers(
     LIMIT $2
   `;
 
-  console.log(`Query: ${sql}`)
+  logger.debug(`Query: ${sql}`)
   
-  console.log(`Params: ${JSON.stringify(params)}`)
+  logger.debug(`Params: ${JSON.stringify(params)}`)
 
   const result = await pool.query(sql, params);
   return result.rows as HybridSearchResult[];

@@ -1,11 +1,15 @@
 import { OllamaService } from './ollama.js';
 import { toolDefinitions, toolExecutors } from '../tools/index.js';
-import {ChatMessage} from "../types";
+import { ChatMessage } from '../types/index.js';
+import { createModuleLogger } from '../config/logger.js';
+
+const logger = createModuleLogger('ChatService');
 
 export class ChatService {
   private ollama = new OllamaService();
 
   async processMessage(userMessage: string): Promise<string> {
+    logger.debug({ userMessage }, 'Starting message processing');
     const messages: ChatMessage[] = [
       {
         role: 'system',
@@ -53,45 +57,59 @@ Always retrieve data first, then craft compelling narratives around the facts.`
 
     let response = await this.ollama.chat(messages, toolDefinitions);
 
-    console.log('Initial response:', JSON.stringify(response, null, 2));
-    
+    logger.debug({ hasToolCalls: !!response.message?.tool_calls }, 'Received initial LLM response');
+
     // Handle tool calls
     if (response.message?.tool_calls) {
-      console.log('Tool calls:', JSON.stringify(response.message.tool_calls, null, 2));
+      logger.info(
+        { toolCount: response.message.tool_calls.length },
+        'Processing tool calls'
+      );
+
       for (const toolCall of response.message.tool_calls) {
-        console.log('Processing tool call:', toolCall);
         const toolName = toolCall.function.name;
         const args = toolCall.function.arguments;
-        
+
+        logger.info({ toolName, args }, 'Executing tool');
+
         if (toolName in toolExecutors) {
           try {
+            const startTime = Date.now();
             const result = await (toolExecutors as any)[toolName](...Object.values(args));
+            const duration = Date.now() - startTime;
 
-            // console.log(`Tool Result:\n${JSON.stringify(result)}`);
-            
+            logger.info(
+              { toolName, duration, resultSize: JSON.stringify(result).length },
+              'Tool executed successfully'
+            );
+
             messages.push({
               role: 'assistant',
               content: response.message?.content || '',
               tool_calls: response.message?.tool_calls
             });
-            
+
             messages.push({
               role: 'tool',
               content: JSON.stringify(result)
             });
 
-            // console.log(`Message to LLM:\n${JSON.stringify(messages, null, 2)}`);
-            
             // Get final response with tool results
+            logger.debug('Requesting final LLM response with tool results');
             response = await this.ollama.chat(messages);
           } catch (error) {
-            console.error(`Tool execution error for ${toolName}:`, error);
+            logger.error({ err: error, toolName, args }, 'Tool execution failed');
             return `Error executing ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
           }
+        } else {
+          logger.warn({ toolName, availableTools: Object.keys(toolExecutors) }, 'Unknown tool requested');
         }
       }
     }
 
-    return response.message?.content || response.response || 'No response generated';
+    const finalResponse = response.message?.content || response.response || 'No response generated';
+    logger.debug({ responseLength: finalResponse.length }, 'Message processing complete');
+
+    return finalResponse;
   }
 }
