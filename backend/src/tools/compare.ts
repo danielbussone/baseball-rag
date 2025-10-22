@@ -9,18 +9,23 @@ export async function comparePlayers(player1: string, player2: string) {
   return {
     player1: {
       name: career1.seasons[0]?.player_name || player1,
-      career: career1.totals,
-      bestSeason: career1.seasons.find(s => s.war === career1.totals.peakWAR)
+      career: career1.career,
+      bestSeason: career1.career?.peak_year,
+      bestWar: career1.career?.peak_war,
+      peakYearsWar: career1.career?.peak_7yr_war
     },
     player2: {
       name: career2.seasons[0]?.player_name || player2,
-      career: career2.totals,
-      bestSeason: career2.seasons.find(s => s.war === career2.totals.peakWAR)
+      career: career2.career,
+      bestSeason: career2.career?.peak_year,
+      bestWar: career2.career?.peak_war,
+      peakYearsWar: career2.career?.peak_7yr_war
     },
     comparison: {
-      warDiff: career1.totals.totalWAR - career2.totals.totalWAR,
-      longevityDiff: career1.totals.seasons - career2.totals.seasons,
-      peakDiff: career1.totals.peakWAR - career2.totals.peakWAR
+      warDiff: (career1.career?.total_war || 0) - (career2.career?.total_war || 0),
+      longevityDiff: (career1.career?.seasons || 0) - (career2.career?.seasons || 0),
+      peakDiff: (career1.career?.peak_7yr_war || 0) - (career2.career?.peak_7yr_war || 0),
+      bestYearDiff: (career1.career?.peak_war || 0) - (career2.career?.peak_war || 0)
     }
   };
 }

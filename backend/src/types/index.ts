@@ -30,6 +30,28 @@ export interface SeasonStats {
   exit_velo_grade?: number;
 }
 
+export interface CareerStats {
+  fangraphs_id: number;
+  player_name: string;
+  bats: string;
+  first_season: number;
+  last_season: number;
+  seasons: number;
+  total_games: number;
+  total_pa: number;
+  total_hr: number;
+  avg_batting_avg: number;
+  avg_obp: number;
+  avg_slg: number;
+  total_war: number;
+  avg_war: number;
+  avg_wrc_plus: number;
+  peak_war: number;
+  peak_year: number;
+  peak_7yr_war: number;
+  jaws: number;
+}
+
 export interface SearchFilters {
   position?: string;
   minWAR?: number;

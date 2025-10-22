@@ -15,15 +15,18 @@ interface OllamaResponse {
   };
 }
 
+import { env } from '../config/env.js';
+
 export class OllamaService {
-  private baseUrl = 'http://localhost:11434';
+  private baseUrl = env.ollama.baseUrl;
+  private model = env.ollama.model;
 
   async chat(messages: any[], tools?: any[]): Promise<OllamaResponse> {
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'llama3.2',
+        model: this.model,
         messages,
         tools,
         stream: false

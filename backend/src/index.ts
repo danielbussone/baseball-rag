@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { ChatService } from './services/chat.js';
+import { env } from './config/env.js';
 
 const fastify = Fastify({ logger: true });
 const chatService = new ChatService();
@@ -36,8 +37,9 @@ fastify.get('/api/health', async () => {
 
 const start = async () => {
   try {
-    await fastify.listen({ port: 3001, host: '0.0.0.0' });
-    console.log('🚀 Baseball RAG Backend running on http://localhost:3001');
+    await fastify.listen({ port: env.server.port, host: env.server.host });
+    console.log(`🚀 Baseball RAG Backend running on http://localhost:${env.server.port}`);
+    console.log(`📊 Environment: ${env.server.nodeEnv}`);
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

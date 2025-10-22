@@ -1,10 +1,12 @@
 import pkg from 'pg';
+import { env } from '../config/env.js';
+
 const { Pool } = pkg;
 
 export const pool = new Pool({
-  host: 'localhost',
-  port: 5432,
-  database: 'postgres',
-  user: 'postgres',
-  password: 'KenGriffeyJr.24PG'
+  host: env.db.host,
+  port: env.db.port,
+  database: env.db.database,
+  user: env.db.user,
+  password: env.db.password,
 });

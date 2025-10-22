@@ -170,9 +170,9 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [x] `/health` endpoint for health checks
 - [x] PostgreSQL connection pooling
 - [x] Basic error handling
+- [x] Environment variable configuration with dotenv
 - [ ] **TODO:** Streaming responses for chat endpoint
 - [ ] **TODO:** Comprehensive error logging
-- [ ] **TODO:** Environment variable configuration (database credentials currently hardcoded)
 
 #### 1.5 Frontend
 - [ ] Chat interface (text input/output)
@@ -949,9 +949,9 @@ Vector embeddings for semantic search of player seasons.
 3. ✅ Configure PostgreSQL connection pooling
 4. ✅ Basic error handling
 5. ✅ Integrate Ollama with TypeScript backend
-6. ⚠️ TODO: Add streaming responses
-7. ⚠️ TODO: Improve error logging
-8. ⚠️ TODO: Environment variable configuration
+6. ✅ Environment variable configuration with dotenv
+7. ⚠️ TODO: Add streaming responses
+8. ⚠️ TODO: Improve error logging
 
 **Current Focus:**
 - Fix Phase 1.3 known issues (search filters, career summary, prompt improvements)
@@ -1016,6 +1016,12 @@ npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --mi
 ```bash
 cd backend
 npm install
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env and set your database password
+
+# Start the backend server
 npm run dev  # Start the chat interface
 
 # Example queries:
@@ -1161,18 +1167,22 @@ LIMIT 10;
 19. **Career aggregations should use database views:** Currently aggregating season stats in code for `get_career_summary()`. Should leverage `fg_career_stats` view for consistency and performance.
 20. **Search filter parameter extraction is fragile:** LLM doesn't always extract filters correctly from natural language queries (e.g., "similar players with power" not triggering power filter). May need more explicit prompt guidance or examples.
 
+### Phase 1.4 (Backend API) - Partial
+21. **Environment variables are essential:** Using dotenv for configuration management instead of hardcoded values. Critical for security (keeps credentials out of git) and deployment flexibility (different configs for dev/prod).
+22. **Centralized config pattern is clean:** Single `config/env.ts` module with typed exports makes it easy to manage all configuration in one place and ensures type safety throughout the app.
+
 ### Phase 2.7 (Percentile Rankings) - Future
-21. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
-22. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
-23. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
-24. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
-25. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+23. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+24. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+25. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+26. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+27. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
 
 ### Phase 2 (Enhanced Retrieval) - Future
-26. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
-27. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
-28. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
-29. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
+28. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
+29. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
+30. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
+31. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
 
 ---
 
@@ -1220,20 +1230,25 @@ baseball-rag/
 ├── backend/                     # TypeScript backend with LLM integration
 │   ├── package.json
 │   ├── tsconfig.json
+│   ├── .env.example             # Environment variable template
+│   ├── .env                     # Environment variables (gitignored)
 │   └── src/
-│       ├── index.ts             # CLI entry point
+│       ├── index.ts             # Server entry point
+│       ├── config/
+│       │   └── env.ts           # Environment configuration loader
 │       ├── types/
 │       │   └── index.ts         # Interface types
 │       ├── services/
 │       │   ├── chat.ts          # LLM orchestration & tool calling
 │       │   ├── ollama.ts        # Ollama API client
+│       │   ├── database.ts      # PostgreSQL connection pool
 │       │   └── embedding.ts     # Embedding service
 │       └── tools/
-│           ├── index.ts         # Tool definitions export
-│           ├── definitions.ts   # tool definitions
+│           ├── index.ts         # Tool executor exports
+│           ├── definitions.ts   # Tool definitions for Ollama
 │           ├── search.ts        # search_similar_players tool
 │           ├── player-stats.ts  # get_player_stats & get_career_summary tools
-│           └── compare.ts       # compare_players tool (future)
+│           └── compare.ts       # compare_players tool
 └── README.md                    # This document (v1.4)
 ```
 
