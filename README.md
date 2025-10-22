@@ -164,11 +164,15 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [ ] Prompt needs iteration for better stat formatting and presentation
 - [ ] Scouting grade qualitative descriptors needed (currently copy/pasting examples)
 
-#### 1.4 Backend API
-- [ ] Express/Fastify server
-- [ ] `/chat` endpoint with streaming responses
-- [ ] PostgreSQL connection pooling
-- [ ] Error handling and logging
+#### 1.4 Backend API (Partially Complete)
+- [x] Fastify server with CORS support
+- [x] `/chat` endpoint (non-streaming)
+- [x] `/health` endpoint for health checks
+- [x] PostgreSQL connection pooling
+- [x] Basic error handling
+- [ ] **TODO:** Streaming responses for chat endpoint
+- [ ] **TODO:** Comprehensive error logging
+- [ ] **TODO:** Environment variable configuration (database credentials currently hardcoded)
 
 #### 1.5 Frontend
 - [ ] Chat interface (text input/output)
@@ -939,12 +943,20 @@ Vector embeddings for semantic search of player seasons.
 4. ✅ Implement tool calling loop
 5. ✅ Test with example queries
 
-**Phase 1.4: Backend API (Current)**
-1. Set up Express/Fastify server
-2. Implement `/chat` endpoint with streaming responses
-3. Configure PostgreSQL connection pooling
-4. Add error handling and logging
-5. Integrate Ollama with TypeScript backend
+**Phase 1.4: Backend API (Partially Complete)**
+1. ✅ Set up Fastify server with CORS
+2. ✅ Implement `/chat` endpoint (non-streaming)
+3. ✅ Configure PostgreSQL connection pooling
+4. ✅ Basic error handling
+5. ✅ Integrate Ollama with TypeScript backend
+6. ⚠️ TODO: Add streaming responses
+7. ⚠️ TODO: Improve error logging
+8. ⚠️ TODO: Environment variable configuration
+
+**Current Focus:**
+- Fix Phase 1.3 known issues (search filters, career summary, prompt improvements)
+- Complete Phase 1.4 remaining items (streaming, env vars, logging)
+- Begin Phase 1.5 (Frontend)
 
 ### Running the Project (Current State)
 
