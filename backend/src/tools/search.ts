@@ -17,23 +17,19 @@ export interface HybridSearchResult {
   similarity: number;
 }
 
-// Instead of positional: searchSimilarPlayers(filters, limit, queryText)
-// Use object destructuring:
-export async function searchSimilarPlayers({
-                                             query,
-                                             filters = {},
-                                             limit = 10
-                                           }: {
-  query: string;
-  filters?: SearchFilters;
-  limit?: number;
-}): Promise<HybridSearchResult[]>
- {
-  // Generate query embedding
-  const queryEmbedding = await generateEmbedding(query);
+// Ideally this would be (query, filters, limit), but it looks like LLM tool calls are ordering input args alphabelically.
+export async function searchSimilarPlayers(
+  filters: SearchFilters = {},
+  limit: number = 10,
+  query: string
+): Promise<HybridSearchResult[]> {
+
   console.log(`Query Text: ${query}`)
   console.log(`Search Filters: ${JSON.stringify(filters)}`)
   console.log(`Limit: ${limit}`)
+  
+  // Generate query embedding
+  const queryEmbedding = await generateEmbedding(query);
 
   // Build WHERE clause from filters
   const whereClauses: string[] = ["embedding_type = 'season_summary'"];
@@ -41,6 +37,7 @@ export async function searchSimilarPlayers({
   let paramIndex = 3;
 
   if (filters.position) {
+    console.log(`Position filter: ${filters.position}`)
     whereClauses.push(`s.position ILIKE $${paramIndex}`);
     params.push(`%${filters.position}%`);
     paramIndex++;
@@ -83,12 +80,14 @@ export async function searchSimilarPlayers({
   }
 
   if (filters.minPowerGrade !== undefined) {
+    console.log(`Min Power filter: ${filters.minPowerGrade}`)
     whereClauses.push(`s.power_grade >= $${paramIndex}`);
     params.push(filters.minPowerGrade);
     paramIndex++;
   }
 
   if (filters.maxPowerGrade !== undefined) {
+    console.log(`Max Power filter: ${filters.maxPowerGrade}`)
     whereClauses.push(`s.power_grade <= $${paramIndex}`);
     params.push(filters.maxPowerGrade);
     paramIndex++;
@@ -119,6 +118,7 @@ export async function searchSimilarPlayers({
   }
 
   if (filters.yearRange) {
+    console.log(`Years filter: ${filters.yearRange}`)
     whereClauses.push(`s.year BETWEEN $${paramIndex} AND $${paramIndex + 1}`);
     params.push(filters.yearRange[0], filters.yearRange[1]);
     paramIndex += 2;
