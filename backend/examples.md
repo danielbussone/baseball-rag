@@ -1,11 +1,13 @@
-#Compare Players
+# Compare Players
 
+### Input
 ```
 {
     "message": "Compare the careers of Mike Trout and Ken Griffey Jr."
 }
 ```
 
+### Output
 Mike Trout and Ken Griffey Jr. are two of the most iconic players in baseball history, known for their incredible talent and dominance on the field.
 
 **Career Comparison:**
@@ -36,14 +38,16 @@ In terms of advanced metrics, Mike Trout has a slight edge in WAR and WRC+ due t
 
 --------------------------------------------------------------------------------------------------------
 
-#Player Characteristics Search
+# Player Characteristics Search
 
+### Input
 ```
 {
     "message": "Who are some elite slugging first baseman from 2015-2020?"
 }
 ```
 
+### Output
 Based on the search results, here are some elite slugging first baseman from 2015-2020:
 
 * José Abreu (CHW) - 36 home runs, .581 slugging percentage, 167 wRC+
@@ -54,8 +58,9 @@ These players are all above the elite grade threshold of 80.
 
 --------------------------------------------------------------------------------------------------------
 
-#Player Summary
+# Player Summary
 
+### Input
 ```
 {
     "message": "Tell me about Mookie Betts"
@@ -72,14 +77,16 @@ Betts's overall grade is 55, indicating that he is among the best players in bas
 
 --------------------------------------------------------------------------------------------------------
 
-#Player Season Stats
+# Player Season Stats
 
+### Input
 ```
 {
     "message": "Tell me about Andrelton Simmons' fielding stats from 2014"
 }
 ```
 
+### Output
 Andrelton Simmons' fielding stats from 2014 were:
 
 * Position: SS
