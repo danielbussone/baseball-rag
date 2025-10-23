@@ -1,8 +1,8 @@
 # Baseball RAG Agent - Project Specification
 
-**Version:** 1.4
-**Last Updated:** October 21, 2025
-**Status:** Phase 1.3 Complete (LLM Integration with known issues), Moving to Phase 1.4 (Backend API)
+**Version:** 1.5
+**Last Updated:** October 22, 2025
+**Status:** Phase 1.4 Complete (Backend API), Moving to Phase 1.5 (Frontend)
 
 ---
 
@@ -127,7 +127,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 ## Feature Breakdown
 
 ### Phase 1: MVP (Core RAG Functionality)
-**Status:** ETL ✅, Embeddings ✅, LLM Integration ✅ (with known issues)
+**Status:** ETL ✅, Embeddings ✅, LLM Integration ✅, Backend API ✅, Moving to Frontend
 
 #### 1.1 Data Pipeline ✅ COMPLETE (Grades Pending Revision)
 - [x] FanGraphs batter leaderboards (1988-2025)
@@ -164,7 +164,7 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
 - [ ] Prompt needs iteration for better stat formatting and presentation
 - [ ] Scouting grade qualitative descriptors needed (currently copy/pasting examples)
 
-#### 1.4 Backend API (Mostly Complete)
+#### 1.4 Backend API ✅ COMPLETE
 - [x] Fastify server with CORS support
 - [x] `/chat` endpoint (non-streaming)
 - [x] `/health` endpoint for health checks
@@ -178,13 +178,15 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - Module-specific loggers
   - Pretty printing in development
   - Graceful shutdown handling
-- [ ] **TODO:** Streaming responses for chat endpoint
+- [ ] **DEFERRED to Phase 2:** Streaming responses (see [STREAMING_IMPLEMENTATION.md](backend/STREAMING_IMPLEMENTATION.md))
 
-#### 1.5 Frontend
+#### 1.5 Frontend (Next Up)
+- [ ] React + TypeScript setup with Vite
 - [ ] Chat interface (text input/output)
-- [ ] Display LLM responses with citations
-- [ ] Show retrieved stats in structured format
+- [ ] Display LLM responses with markdown rendering
+- [ ] Show tool execution indicators
 - [ ] Basic loading/error states
+- [ ] Connect to backend `/api/chat` endpoint
 
 #### 1.6 MVP Acceptance Criteria
 - User can ask: "Compare Mike Trout and Ken Griffey Jr"
@@ -949,7 +951,7 @@ Vector embeddings for semantic search of player seasons.
 4. ✅ Implement tool calling loop
 5. ✅ Test with example queries
 
-**Phase 1.4: Backend API (Mostly Complete)**
+**Phase 1.4: Backend API ✅ COMPLETE**
 1. ✅ Set up Fastify server with CORS
 2. ✅ Implement `/chat` endpoint (non-streaming)
 3. ✅ Configure PostgreSQL connection pooling
@@ -960,12 +962,19 @@ Vector embeddings for semantic search of player seasons.
    - Request tracing and performance metrics
    - Database connection monitoring
    - Tool execution tracking
-7. ⚠️ TODO: Add streaming responses
+7. ⏭️ Streaming responses deferred to Phase 2 (implementation plan documented)
+
+**Phase 1.5: Frontend (Current)**
+1. Set up React + TypeScript with Vite
+2. Create chat interface components
+3. Implement API client for backend
+4. Add markdown rendering for responses
+5. Add loading and error states
+6. Test end-to-end chat flow
 
 **Current Focus:**
-- Complete Phase 1.4: Add streaming responses (optional)
-- Fix Phase 1.3 known issues (search filters, career summary, prompt improvements)
-- Begin Phase 1.5 (Frontend)
+- Build Phase 1.5 Frontend
+- Polish Phase 1.3 issues as needed (some mitigations already done)
 
 ### Running the Project (Current State)
 
@@ -1176,25 +1185,27 @@ LIMIT 10;
 19. **Career aggregations should use database views:** Currently aggregating season stats in code for `get_career_summary()`. Should leverage `fg_career_stats` view for consistency and performance.
 20. **Search filter parameter extraction is fragile:** LLM doesn't always extract filters correctly from natural language queries (e.g., "similar players with power" not triggering power filter). May need more explicit prompt guidance or examples.
 
-### Phase 1.4 (Backend API) - Mostly Complete
+### Phase 1.4 (Backend API) - Complete
 21. **Environment variables are essential:** Using dotenv for configuration management instead of hardcoded values. Critical for security (keeps credentials out of git) and deployment flexibility (different configs for dev/prod).
 22. **Centralized config pattern is clean:** Single `config/env.ts` module with typed exports makes it easy to manage all configuration in one place and ensures type safety throughout the app.
 23. **Structured logging is invaluable:** Pino provides fast, structured JSON logging with minimal overhead. Key features: request tracing (request IDs), performance metrics (duration tracking), module-specific loggers, pretty printing in dev, and automatic error serialization. Makes debugging and monitoring dramatically easier.
 24. **Log at the right level:** Use debug for detailed flow, info for important events (tool execution, startup), warn for unexpected but handled situations, error for failures. Avoid logging sensitive data (passwords, tokens).
 25. **Graceful shutdown matters:** Proper SIGINT/SIGTERM handlers allow the server to finish processing requests and close connections cleanly before exiting. Important for production deployments.
+26. **Streaming is complex with tool calling:** Adding SSE streaming adds significant complexity, especially when LLM needs to call tools mid-stream. For MVP, non-streaming works fine. Defer streaming until Phase 2 when you can properly evaluate UX benefits with real users.
+27. **Document deferred features:** Created [STREAMING_IMPLEMENTATION.md](backend/STREAMING_IMPLEMENTATION.md) with detailed implementation plan. Makes it easy to pick up later without losing context.
 
 ### Phase 2.7 (Percentile Rankings) - Future
-26. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
-27. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
-28. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
-29. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
-30. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+28. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+29. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+30. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+31. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+32. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
 
 ### Phase 2 (Enhanced Retrieval) - Future
-31. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
-32. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
-33. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
-34. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
+33. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
+34. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
+35. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
+36. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
 
 ---
 
