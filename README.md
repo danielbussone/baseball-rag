@@ -1,8 +1,8 @@
 # Baseball RAG Agent - Project Specification
 
 **Version:** 1.5
-**Last Updated:** October 22, 2025
-**Status:** Phase 1.4 Complete (Backend API), Moving to Phase 1.5 (Frontend)
+**Last Updated:** October 23, 2025
+**Status:** Phase 1.5 In Progress (Frontend - Material UI added, core chat interface complete)
 
 ---
 
@@ -180,13 +180,44 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - Graceful shutdown handling
 - [ ] **DEFERRED to Phase 2:** Streaming responses (see [STREAMING_IMPLEMENTATION.md](backend/STREAMING_IMPLEMENTATION.md))
 
-#### 1.5 Frontend (Next Up)
-- [ ] React + TypeScript setup with Vite
-- [ ] Chat interface (text input/output)
-- [ ] Display LLM responses with markdown rendering
-- [ ] Show tool execution indicators
-- [ ] Basic loading/error states
-- [ ] Connect to backend `/api/chat` endpoint
+#### 1.5 Frontend (In Progress)
+**Status:** Material UI added, core chat interface complete
+
+**Completed:**
+- [x] React + TypeScript setup with Vite
+- [x] Material UI integration (@mui/material, @mui/icons-material)
+- [x] TanStack Query for data fetching
+- [x] Chat interface components:
+  - [x] Chat.tsx - Main container with state management
+  - [x] MessageList.tsx - Message display with empty state
+  - [x] MessageBubble.tsx - Individual message component with SMS-style bubbles
+  - [x] ChatInput.tsx - Input with keyboard shortcuts (Enter to send, Shift+Enter for newlines)
+- [x] Display LLM responses with markdown rendering (react-markdown)
+- [x] Loading states (spinner with "Thinking..." indicator)
+- [x] Error states (red error messages with error details)
+- [x] Connect to backend `/api/chat` endpoint
+- [x] API client (lib/api.ts) with environment variable support
+- [x] Responsive design (mobile-friendly, SMS-style appearance)
+- [x] Additional features:
+  - [x] Auto-scroll to bottom on new messages
+  - [x] Clear chat functionality with trash icon
+  - [x] Timestamps on all messages
+  - [x] Welcome screen with example queries
+  - [x] Custom scrollbar styling
+
+**Remaining:**
+- [ ] Tool execution indicators (show which tool LLM is calling, e.g., "🔍 Searching for similar players...")
+- [ ] End-to-end testing (test complete flow with backend)
+- [ ] Environment configuration documentation (.env.example updates)
+- [ ] Update main README to mark Phase 1.5 complete
+
+**Optional Enhancements:**
+- [ ] Response streaming (deferred to Phase 2 per backend plan)
+- [ ] Citations display (show sources/database queries used)
+- [ ] Copy message button
+- [ ] Dark mode toggle
+- [ ] Conversation history (localStorage persistence)
+- [ ] Production build optimization (code splitting for 538KB bundle)
 
 #### 1.6 MVP Acceptance Criteria
 - User can ask: "Compare Mike Trout and Ken Griffey Jr"
@@ -1030,7 +1061,7 @@ npm start hybrid "defensive wizard" --position=SS --minFieldingGrade=70
 npm start hybrid "five tool player" --minOverallGrade=60 --minPowerGrade=60 --minFieldingGrade=60
 ```
 
-#### Run LLM Chat (Phase 1.3)
+#### Run Backend API (Phase 1.4)
 ```bash
 cd backend
 npm install
@@ -1040,8 +1071,40 @@ cp .env.example .env
 # Edit .env and set your database password
 
 # Start the backend server
-npm run dev  # Start the chat interface
+npm run dev  # Runs on http://localhost:3001
 
+# Backend endpoints:
+# - POST /api/chat - Chat with the baseball RAG agent
+# - GET /api/health - Health check endpoint
+```
+
+#### Run Frontend (Phase 1.5)
+```bash
+cd frontend
+npm install
+
+# Configure environment variables (optional)
+# Frontend defaults to http://localhost:3001 for API
+# To override, create .env with:
+# VITE_API_URL=http://your-backend-url
+
+# Start the frontend dev server
+npm run dev  # Runs on http://localhost:3000
+
+# Build for production
+npm run build
+npm run preview  # Preview production build
+```
+
+#### Full Stack Development
+```bash
+# Terminal 1 - Backend
+cd backend && npm run dev
+
+# Terminal 2 - Frontend
+cd frontend && npm run dev
+
+# Open browser to http://localhost:3000
 # Example queries:
 # - "Compare Mike Trout and Ken Griffey Jr"
 # - "Tell me about Mookie Betts' 2024 season"
@@ -1194,18 +1257,28 @@ LIMIT 10;
 26. **Streaming is complex with tool calling:** Adding SSE streaming adds significant complexity, especially when LLM needs to call tools mid-stream. For MVP, non-streaming works fine. Defer streaming until Phase 2 when you can properly evaluate UX benefits with real users.
 27. **Document deferred features:** Created [STREAMING_IMPLEMENTATION.md](backend/STREAMING_IMPLEMENTATION.md) with detailed implementation plan. Makes it easy to pick up later without losing context.
 
+### Phase 1.5 (Frontend) - In Progress
+28. **Material UI provides excellent UX patterns:** Pre-built components (Box, Paper, TextField, IconButton) with consistent theming accelerate UI development. ThemeProvider + CssBaseline ensure global design consistency.
+29. **TanStack Query simplifies data fetching:** Mutations with optimistic updates provide instant user feedback. Built-in loading/error states reduce boilerplate. Cache management and refetching handled automatically.
+30. **Component composition keeps code clean:** Breaking chat into MessageList, MessageBubble, ChatInput makes each component focused and testable. Single responsibility principle applies to UI components too.
+31. **SMS-style chat is familiar UX:** Users immediately understand the interface - blue bubbles for user, gray for assistant, rounded corners, timestamps. No learning curve required.
+32. **Markdown rendering adds value for stats:** Tables, lists, and formatting in LLM responses look professional. react-markdown with custom styling integrates seamlessly with Material UI.
+33. **Loading states prevent confusion:** Showing "Thinking..." with a spinner sets expectations. Users know the system is working, not frozen.
+34. **Build validation catches issues early:** Running `npm run build` during development catches TypeScript errors and bundle size warnings before deployment.
+35. **Environment variables support multiple backends:** VITE_API_URL allows developers to point frontend at different backend instances (local, staging, production) without code changes.
+
 ### Phase 2.7 (Percentile Rankings) - Future
-28. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
-29. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
-30. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
-31. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
-32. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
+36. **Career percentiles from averages, not mean of percentiles:** Statistically sound, avoids non-linear distortion
+37. **Three scopes serve different purposes:** Season (current), Career (all-time), Peak7 (prime comparison)
+38. **Percentile-first grade calculation is superior:** Industry-standard scouting scale mapping, empirically accurate, works for any distribution, self-validating
+39. **Store both percentiles and grades:** Percentiles for exact visualization, grades for scouting-style filtering and descriptions
+40. **SD vs Percentile debate:** Test both approaches empirically - SD (μ±σ) is theoretically pure but assumes normality, percentile approach is distribution-agnostic but deviates from scouting origins. Baseball stats are often skewed, so validate which works better in practice.
 
 ### Phase 2 (Enhanced Retrieval) - Future
-33. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
-34. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
-35. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
-36. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
+41. **Two-stage retrieval is industry standard:** Separate retrieval (recall-focused) from ranking (precision-focused) for best results
+42. **FTS + Vector + Reranking complement each other:** FTS for short/exact queries, vector for semantic similarity, cross-encoder for final precision
+43. **Keyword extraction matters:** Baseball-specific phrase detection (positions, qualities) significantly improves FTS accuracy
+44. **Query routing reduces latency:** Short queries to FTS (<50ms), long queries to vector (~100ms), reranking only top candidates (~500ms)
 
 ---
 
@@ -1273,7 +1346,26 @@ baseball-rag/
 │           ├── search.ts        # search_similar_players tool
 │           ├── player-stats.ts  # get_player_stats & get_career_summary tools
 │           └── compare.ts       # compare_players tool
-└── README.md                    # This document (v1.4)
+├── frontend/                    # React frontend with Material UI
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── vite.config.ts           # Vite configuration
+│   ├── .env.example             # Environment variable template
+│   ├── .env                     # Environment variables (gitignored)
+│   └── src/
+│       ├── App.tsx              # Root component with theme provider
+│       ├── App.css              # Global styles
+│       ├── main.tsx             # React entry point
+│       ├── components/
+│       │   ├── Chat.tsx         # Main chat container
+│       │   ├── MessageList.tsx  # Message list display
+│       │   ├── MessageBubble.tsx # Individual message bubble
+│       │   └── ChatInput.tsx    # Chat input with keyboard shortcuts
+│       ├── lib/
+│       │   └── api.ts           # API client for backend
+│       └── types/
+│           └── index.ts         # TypeScript types
+└── README.md                    # This document (v1.5)
 ```
 
 ### External Resources

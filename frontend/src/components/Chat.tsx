@@ -1,14 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
+import { Box, Paper, Typography, IconButton } from '@mui/material';
+import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { sendChatMessage } from '../lib/api';
 import type { ChatMessage } from '../types';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 
+/**
+ * Main chat container component
+ * Manages chat state, message sending, and scrolling behavior
+ */
 export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Scrolls the chat to the bottom when new messages arrive
+   */
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -70,36 +80,99 @@ export default function Chat() {
     },
   });
 
+  /**
+   * Handles sending a new message
+   * @param message - The message text to send
+   */
   const handleSendMessage = (message: string) => {
     if (!message.trim() || mutation.isPending) return;
     mutation.mutate(message);
   };
 
+  /**
+   * Clears all messages from the chat
+   */
   const handleClearChat = () => {
     setMessages([]);
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg h-[calc(100vh-200px)] flex flex-col">
-      <div className="flex justify-between items-center p-4 border-b">
-        <h2 className="text-lg font-semibold text-gray-800">Chat</h2>
+    <Box
+      sx={{
+        maxWidth: 1200,
+        width: '100%',
+        mx: 'auto',
+        height: { xs: 'calc(100vh - 16px)', sm: 'calc(100vh - 32px)', md: 'calc(100vh - 48px)' },
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {/* Header */}
+      <Paper
+        elevation={2}
+        sx={{
+          p: 2,
+          borderRadius: '16px 16px 0 0',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          bgcolor: 'white',
+          position: 'relative',
+        }}
+      >
+        <Box sx={{ flex: 1, textAlign: 'center' }}>
+          <Typography variant="h2" component="h1" fontWeight="bold">
+            <SportsBaseballIcon sx={{ fontSize: 50, mb: 2, opacity: 0.5 }} /> The Baseball RAG <SportsBaseballIcon sx={{ fontSize: 50, mb: 2, opacity: 0.5 }} />
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Let's Talk Baseball
+          </Typography>
+        </Box>
         {messages.length > 0 && (
-          <button
+          <IconButton
             onClick={handleClearChat}
-            className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1 rounded hover:bg-gray-100"
+            size="small"
+            title="Clear chat"
+            sx={{
+              color: 'text.secondary',
+              position: 'absolute',
+              right: 16,
+              top: '50%',
+              transform: 'translateY(-50%)',
+            }}
           >
-            Clear Chat
-          </button>
+            <DeleteOutlineIcon />
+          </IconButton>
         )}
-      </div>
+      </Paper>
 
-      <MessageList messages={messages} />
-      <div ref={messagesEndRef} />
+      {/* Messages */}
+      <Box
+        sx={{
+          flex: 1,
+          bgcolor: 'white',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <MessageList messages={messages} />
+        <div ref={messagesEndRef} />
+      </Box>
 
-      <ChatInput
-        onSendMessage={handleSendMessage}
-        isLoading={mutation.isPending}
-      />
-    </div>
+      {/* Input */}
+      <Paper
+        elevation={2}
+        sx={{
+          borderRadius: '0 0 16px 16px',
+          bgcolor: 'white',
+        }}
+      >
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          isLoading={mutation.isPending}
+        />
+      </Paper>
+    </Box>
   );
 }
