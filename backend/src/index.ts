@@ -18,7 +18,7 @@ fastify.register(import('@fastify/cors'), {
   origin: true
 });
 
-// Chat endpoint
+// Chat endpoint (non-streaming)
 fastify.post('/api/chat', async (request, reply) => {
   const { message } = request.body as { message: string };
 
@@ -47,6 +47,57 @@ fastify.post('/api/chat', async (request, reply) => {
       error: 'Internal server error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// Chat endpoint (streaming with SSE)
+fastify.post('/api/chat/stream', async (request, reply) => {
+  const { message } = request.body as { message: string };
+
+  if (!message) {
+    request.log.warn({ body: request.body }, 'Chat stream request missing message field');
+    return reply.code(400).send({ error: 'Message is required' });
+  }
+
+  request.log.info({ messageLength: message.length }, 'Processing streaming chat message');
+
+  // Set SSE headers
+  reply.raw.setHeader('Content-Type', 'text/event-stream');
+  reply.raw.setHeader('Cache-Control', 'no-cache');
+  reply.raw.setHeader('Connection', 'keep-alive');
+
+  // Set CORS headers for streaming endpoint
+  reply.raw.setHeader('Access-Control-Allow-Origin', '*');
+  reply.raw.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  reply.raw.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  try {
+    const startTime = Date.now();
+    let chunkCount = 0;
+
+    for await (const chunk of chatService.processMessageStream(message)) {
+      chunkCount++;
+      // Send SSE formatted data
+      reply.raw.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    }
+
+    const duration = Date.now() - startTime;
+    request.log.info(
+      { duration, chunkCount },
+      'Streaming chat message processed successfully'
+    );
+
+    reply.raw.end();
+  } catch (error) {
+    request.log.error({ err: error, message }, 'Error processing streaming chat message');
+
+    const errorChunk = {
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+
+    reply.raw.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+    reply.raw.end();
   }
 });
 

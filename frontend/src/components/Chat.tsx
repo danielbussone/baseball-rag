@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { Box, Paper, Typography, IconButton } from '@mui/material';
 import SportsBaseballIcon from '@mui/icons-material/SportsBaseball';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
-import { sendChatMessage } from '../lib/api';
-import type { ChatMessage } from '../types';
+import { sendChatMessageStream } from '../lib/api';
+import type { ChatMessage, ToolExecution } from '../types';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 
@@ -14,7 +13,10 @@ import ChatInput from './ChatInput';
  */
 export default function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const contentBufferRef = useRef<string>('');
+  const updateIntervalRef = useRef<number | null>(null);
 
   /**
    * Scrolls the chat to the bottom when new messages arrive
@@ -27,67 +29,176 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const mutation = useMutation({
-    mutationFn: sendChatMessage,
-    onMutate: async (message) => {
-      // Add user message immediately
-      const userMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: message,
-        timestamp: new Date(),
-      };
+  /**
+   * Handles sending a new message with streaming
+   * @param message - The message text to send
+   */
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim() || isLoading) return;
 
-      // Add loading assistant message
-      const loadingMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '',
-        timestamp: new Date(),
-        isLoading: true,
-      };
+    setIsLoading(true);
 
-      setMessages((prev) => [...prev, userMessage, loadingMessage]);
-    },
-    onSuccess: (data) => {
+    // Add user message immediately
+    const userMessage: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: message,
+      timestamp: new Date(),
+    };
+
+    // Add streaming assistant message
+    const assistantMessageId = (Date.now() + 1).toString();
+    const assistantMessage: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      isLoading: true,
+      toolExecutions: [],
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+
+    // Reset buffer
+    contentBufferRef.current = '';
+
+    // Clear any existing interval
+    if (updateIntervalRef.current) {
+      clearInterval(updateIntervalRef.current);
+    }
+
+    // Start interval to update UI periodically with buffered content
+    updateIntervalRef.current = window.setInterval(() => {
+      const currentContent = contentBufferRef.current;
       setMessages((prev) => {
         const updated = [...prev];
-        const loadingIndex = updated.findIndex((m) => m.isLoading);
-        if (loadingIndex !== -1) {
-          updated[loadingIndex] = {
-            ...updated[loadingIndex],
-            content: data.response,
-            isLoading: false,
-            toolExecutions: data.toolExecutions,
+        const index = updated.findIndex((m) => m.id === assistantMessageId);
+        if (index !== -1 && updated[index].content !== currentContent) {
+          updated[index] = {
+            ...updated[index],
+            content: currentContent,
           };
         }
         return updated;
       });
-    },
-    onError: (error) => {
+    }, 50); // Update UI every 50ms
+
+    try {
+      await sendChatMessageStream(message, {
+        onContent: (content) => {
+          console.log('[Stream] Content chunk:', content.length, 'chars');
+          // Just accumulate in buffer, interval will handle UI updates
+          contentBufferRef.current += content;
+        },
+        onToolStart: (toolExecution: ToolExecution) => {
+          console.log('[Stream] Tool start:', toolExecution.name);
+          setMessages((prev) => {
+            const updated = [...prev];
+            const index = updated.findIndex((m) => m.id === assistantMessageId);
+            if (index !== -1) {
+              const existingTools = updated[index].toolExecutions || [];
+              updated[index] = {
+                ...updated[index],
+                toolExecutions: [...existingTools, toolExecution],
+              };
+            }
+            return updated;
+          });
+        },
+        onToolEnd: (toolExecution: ToolExecution) => {
+          console.log('[Stream] Tool end:', toolExecution.name, toolExecution.duration + 'ms');
+          setMessages((prev) => {
+            const updated = [...prev];
+            const index = updated.findIndex((m) => m.id === assistantMessageId);
+            if (index !== -1) {
+              const tools = updated[index].toolExecutions || [];
+              const toolIndex = tools.findIndex((t) => t.name === toolExecution.name);
+              if (toolIndex !== -1) {
+                tools[toolIndex] = toolExecution;
+                updated[index] = {
+                  ...updated[index],
+                  toolExecutions: [...tools],
+                };
+              }
+            }
+            return updated;
+          });
+        },
+        onDone: () => {
+          console.log('[Stream] Done');
+
+          // Clear interval
+          if (updateIntervalRef.current) {
+            clearInterval(updateIntervalRef.current);
+            updateIntervalRef.current = null;
+          }
+
+          // Final update with all buffered content
+          setMessages((prev) => {
+            const updated = [...prev];
+            const index = updated.findIndex((m) => m.id === assistantMessageId);
+            if (index !== -1) {
+              updated[index] = {
+                ...updated[index],
+                content: contentBufferRef.current,
+                isLoading: false,
+              };
+            }
+            return updated;
+          });
+
+          contentBufferRef.current = '';
+          setIsLoading(false);
+        },
+        onError: (error: string) => {
+          // Clear interval
+          if (updateIntervalRef.current) {
+            clearInterval(updateIntervalRef.current);
+            updateIntervalRef.current = null;
+          }
+
+          setMessages((prev) => {
+            const updated = [...prev];
+            const index = updated.findIndex((m) => m.id === assistantMessageId);
+            if (index !== -1) {
+              updated[index] = {
+                ...updated[index],
+                content: contentBufferRef.current || 'Sorry, something went wrong.',
+                isLoading: false,
+                error,
+              };
+            }
+            return updated;
+          });
+
+          contentBufferRef.current = '';
+          setIsLoading(false);
+        },
+      });
+    } catch (error) {
+      // Clear interval
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+        updateIntervalRef.current = null;
+      }
+
       setMessages((prev) => {
         const updated = [...prev];
-        const loadingIndex = updated.findIndex((m) => m.isLoading);
-        if (loadingIndex !== -1) {
-          updated[loadingIndex] = {
-            ...updated[loadingIndex],
-            content: 'Sorry, something went wrong.',
+        const index = updated.findIndex((m) => m.id === assistantMessageId);
+        if (index !== -1) {
+          updated[index] = {
+            ...updated[index],
+            content: contentBufferRef.current || 'Sorry, something went wrong.',
             isLoading: false,
             error: error instanceof Error ? error.message : 'Unknown error',
           };
         }
         return updated;
       });
-    },
-  });
 
-  /**
-   * Handles sending a new message
-   * @param message - The message text to send
-   */
-  const handleSendMessage = (message: string) => {
-    if (!message.trim() || mutation.isPending) return;
-    mutation.mutate(message);
+      contentBufferRef.current = '';
+      setIsLoading(false);
+    }
   };
 
   /**
@@ -171,7 +282,7 @@ export default function Chat() {
       >
         <ChatInput
           onSendMessage={handleSendMessage}
-          isLoading={mutation.isPending}
+          isLoading={isLoading}
         />
       </Paper>
     </Box>
