@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Box, Paper, Typography, CircularProgress } from '@mui/material';
 import type { ChatMessage } from '../types';
+import ToolExecutionIndicator from './ToolExecutionIndicator';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -58,6 +59,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         {/* Normal Message */}
         {!message.isLoading && !message.error && (
           <>
+            {/* Tool Execution Indicators for Assistant Messages */}
+            {!isUser && message.toolExecutions && (
+              <ToolExecutionIndicator toolExecutions={message.toolExecutions} />
+            )}
+            
             {isUser ? (
               <Typography
                 variant="body1"

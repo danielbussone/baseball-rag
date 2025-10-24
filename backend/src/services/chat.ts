@@ -1,6 +1,6 @@
 import { OllamaService } from './ollama.js';
 import { toolDefinitions, toolExecutors } from '../tools/index.js';
-import { ChatMessage } from '../types/index.js';
+import { ChatMessage, ToolExecution, ChatResponse } from '../types/index.js';
 import { createModuleLogger } from '../config/logger.js';
 
 const logger = createModuleLogger('ChatService');
@@ -8,8 +8,10 @@ const logger = createModuleLogger('ChatService');
 export class ChatService {
   private ollama = new OllamaService();
 
-  async processMessage(userMessage: string): Promise<string> {
+  async processMessage(userMessage: string): Promise<ChatResponse> {
     logger.debug({ userMessage }, 'Starting message processing');
+    const toolExecutions: ToolExecution[] = [];
+    
     const messages: ChatMessage[] = [
       {
         role: 'system',
@@ -70,6 +72,13 @@ Always retrieve data first, then craft compelling narratives around the facts.`
         const toolName = toolCall.function.name;
         const args = toolCall.function.arguments;
 
+        const toolExecution: ToolExecution = {
+          name: toolName,
+          args,
+          status: 'executing'
+        };
+        toolExecutions.push(toolExecution);
+
         logger.info({ toolName, args }, 'Executing tool');
 
         if (toolName in toolExecutors) {
@@ -77,6 +86,9 @@ Always retrieve data first, then craft compelling narratives around the facts.`
             const startTime = Date.now();
             const result = await (toolExecutors as any)[toolName](...Object.values(args));
             const duration = Date.now() - startTime;
+
+            toolExecution.status = 'completed';
+            toolExecution.duration = duration;
 
             logger.info(
               { toolName, duration, resultSize: JSON.stringify(result).length },
@@ -98,10 +110,18 @@ Always retrieve data first, then craft compelling narratives around the facts.`
             logger.debug('Requesting final LLM response with tool results');
             response = await this.ollama.chat(messages);
           } catch (error) {
+            toolExecution.status = 'error';
+            toolExecution.error = error instanceof Error ? error.message : 'Unknown error';
+            
             logger.error({ err: error, toolName, args }, 'Tool execution failed');
-            return `Error executing ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            return {
+              response: `Error executing ${toolName}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              toolExecutions
+            };
           }
         } else {
+          toolExecution.status = 'error';
+          toolExecution.error = 'Unknown tool';
           logger.warn({ toolName, availableTools: Object.keys(toolExecutors) }, 'Unknown tool requested');
         }
       }
@@ -110,6 +130,9 @@ Always retrieve data first, then craft compelling narratives around the facts.`
     const finalResponse = response.message?.content || response.response || 'No response generated';
     logger.debug({ responseLength: finalResponse.length }, 'Message processing complete');
 
-    return finalResponse;
+    return {
+      response: finalResponse,
+      toolExecutions: toolExecutions.length > 0 ? toolExecutions : undefined
+    };
   }
 }

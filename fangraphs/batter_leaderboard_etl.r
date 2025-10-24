@@ -24,7 +24,7 @@ DB_CONFIG <- list(
   port = 5432,
   dbname = "postgres",
   user = "postgres",
-  password = "KenGriffeyJr.24PG"  # YOUR DOCKER PASSWORD
+  password = "baseball123"  # YOUR DOCKER PASSWORD
 )
 
 # Date range for data pull

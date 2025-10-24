@@ -31,15 +31,15 @@ fastify.post('/api/chat', async (request, reply) => {
 
   try {
     const startTime = Date.now();
-    const response = await chatService.processMessage(message);
+    const result = await chatService.processMessage(message);
     const duration = Date.now() - startTime;
 
     request.log.info(
-      { duration, responseLength: response.length },
+      { duration, responseLength: result.response.length, toolCount: result.toolExecutions?.length || 0 },
       'Chat message processed successfully'
     );
 
-    return { response };
+    return result;
   } catch (error) {
     request.log.error({ err: error, message }, 'Error processing chat message');
 

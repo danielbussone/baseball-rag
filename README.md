@@ -204,15 +204,16 @@ Build a locally-hosted RAG (Retrieval-Augmented Generation) agent that answers c
   - [x] Timestamps on all messages
   - [x] Welcome screen with example queries
   - [x] Custom scrollbar styling
+  - [x] Tool execution indicators (show completed tools with status and timing)
 
 **Remaining:**
-- [ ] Tool execution indicators (show which tool LLM is calling, e.g., "🔍 Searching for similar players...")
 - [ ] End-to-end testing (test complete flow with backend)
 - [ ] Environment configuration documentation (.env.example updates)
 - [ ] Update main README to mark Phase 1.5 complete
 
 **Optional Enhancements:**
 - [ ] Response streaming (deferred to Phase 2 per backend plan)
+- [ ] Real-time tool execution indicators (requires streaming - currently shows post-completion)
 - [ ] Citations display (show sources/database queries used)
 - [ ] Copy message button
 - [ ] Dark mode toggle
@@ -1007,7 +1008,56 @@ Vector embeddings for semantic search of player seasons.
 - Build Phase 1.5 Frontend
 - Polish Phase 1.3 issues as needed (some mitigations already done)
 
-### Running the Project (Current State)
+### Running the Project
+
+## 🐳 Docker Setup (Recommended)
+
+The easiest way to run the entire application is with Docker Compose:
+
+### Quick Start
+
+1. **Start Ollama** (required for LLM functionality):
+   ```bash
+   ollama serve
+   ollama pull llama3.2
+   ```
+
+2. **Start all services**:
+   ```bash
+   # Production mode
+   ./start.sh
+   
+   # Development mode (with hot reload)
+   ./start.sh dev
+   ```
+
+3. **Access the application**:
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:3001
+   - Database: localhost:5432 (postgres/baseball123)
+
+4. **Populate data** (run on host machine):
+   ```bash
+   # Run ETL
+   cd fangraphs && Rscript batter_leaderboard_etl.r
+   
+   # Generate embeddings
+   cd embeddings && npm install && npm run build && npm run generate
+   ```
+
+### Docker Services
+
+- **Database**: PostgreSQL 16 + pgvector extension
+- **Backend**: Node.js API with Ollama integration
+- **Frontend**: React app served by nginx
+
+See [DOCKER_SETUP.md](DOCKER_SETUP.md) for detailed Docker documentation, troubleshooting, and advanced configuration.
+
+---
+
+## 🔧 Manual Setup (Alternative)
+
+If you prefer to run services individually:
 
 #### Prerequisites
 - Docker Desktop (for PostgreSQL)
@@ -1026,13 +1076,14 @@ docker run -d \
   pgvector/pgvector:pg16
 
 # Create schema
-psql -h localhost -U postgres -d postgres -f fangraphs_schema.sql
+psql -h localhost -U postgres -d postgres -f database/fangraphs_schema.sql
 ```
 
 #### Run ETL
 ```bash
 # Edit batter_leaderboard_etl.r to set password
 # Then run:
+cd fangraphs
 Rscript batter_leaderboard_etl.r
 
 # This will:

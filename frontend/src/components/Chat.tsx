@@ -58,6 +58,7 @@ export default function Chat() {
             ...updated[loadingIndex],
             content: data.response,
             isLoading: false,
+            toolExecutions: data.toolExecutions,
           };
         }
         return updated;

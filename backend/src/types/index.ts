@@ -82,3 +82,16 @@ export interface ChatMessage {
   content: string;
   tool_calls?: ToolCall[];
 }
+
+export interface ToolExecution {
+  name: string;
+  args: Record<string, any>;
+  status: 'executing' | 'completed' | 'error';
+  duration?: number;
+  error?: string;
+}
+
+export interface ChatResponse {
+  response: string;
+  toolExecutions?: ToolExecution[];
+}

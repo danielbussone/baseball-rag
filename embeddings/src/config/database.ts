@@ -6,7 +6,7 @@ export const pool = new Pool({
   port: 5432,
   database: 'postgres',
   user: 'postgres',
-  password: 'KenGriffeyJr.24PG'  // CHANGE THIS
+  password: 'baseball123'  // CHANGE THIS
 });
 
 export async function verifyEmbeddingTableExists() {
