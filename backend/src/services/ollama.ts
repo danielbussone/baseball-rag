@@ -136,6 +136,7 @@ export class OllamaService {
           if (line.trim()) {
             try {
               const chunk: OllamaResponse = JSON.parse(line);
+              // logger.debug(`chunk ${JSON.stringify(chunk)}`)
 
               // Log tool calls when they appear
               if (chunk.message?.tool_calls) {

@@ -34,18 +34,8 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           color: isUser ? 'white' : 'text.primary',
         }}
       >
-        {/* Loading State */}
-        {message.isLoading && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <CircularProgress size={16} sx={{ color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              Thinking...
-            </Typography>
-          </Box>
-        )}
-
         {/* Error State */}
-        {message.error && !message.isLoading && (
+        {message.error && (
           <Box>
             <Typography variant="body2" color="error.main">
               {message.content}
@@ -57,8 +47,18 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
         )}
 
         {/* Normal Message */}
-        {!message.isLoading && !message.error && (
+        {!message.error && (
           <>
+            {/* Loading indicator for streaming */}
+            {message.isLoading && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <CircularProgress size={16} sx={{ color: 'text.secondary' }} />
+                <Typography variant="body2" color="text.secondary">
+                  Thinking...
+                </Typography>
+              </Box>
+            )}
+
             {/* Tool Execution Indicators for Assistant Messages */}
             {!isUser && message.toolExecutions && (
               <ToolExecutionIndicator toolExecutions={message.toolExecutions} />
@@ -75,64 +75,66 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                 {message.content}
               </Typography>
             ) : (
-              <Box
-                sx={{
-                  '& p': { margin: '0.5em 0' },
-                  '& p:first-of-type': { marginTop: 0 },
-                  '& p:last-of-type': { marginBottom: 0 },
-                  '& ul, & ol': { margin: '0.5em 0', paddingLeft: '1.5em' },
-                  '& table': {
-                    borderCollapse: 'collapse',
-                    width: '100%',
-                    margin: '0.75em 0',
-                    fontSize: '0.875em',
-                    display: 'table',
-                    overflowX: 'auto',
-                  },
-                  '& th, & td': {
-                    border: '1px solid #ddd',
-                    padding: '8px 12px',
-                    textAlign: 'left',
-                    whiteSpace: 'nowrap',
-                  },
-                  '& th': {
-                    backgroundColor: '#e3f2fd',
-                    fontWeight: 'bold',
-                    color: '#1565c0',
-                    borderBottom: '2px solid #1976d2',
-                  },
-                  '& tbody tr:nth-of-type(even)': {
-                    backgroundColor: '#f9f9f9',
-                  },
-                  '& tbody tr:hover': {
-                    backgroundColor: '#f5f5f5',
-                  },
-                  '& code': {
-                    backgroundColor: '#f5f5f5',
-                    padding: '2px 4px',
-                    borderRadius: '3px',
-                    fontSize: '0.875em',
-                  },
-                  '& pre': {
-                    backgroundColor: '#f5f5f5',
-                    padding: '8px',
-                    borderRadius: '4px',
-                    overflow: 'auto',
-                  },
-                  '& strong': {
-                    fontWeight: 'bold',
-                  },
-                  // Table container for horizontal scroll
-                  '& > :has(table)': {
-                    overflowX: 'auto',
-                    maxWidth: '100%',
-                  },
-                }}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
-              </Box>
+              message.content && (
+                <Box
+                  sx={{
+                    '& p': { margin: '0.5em 0' },
+                    '& p:first-of-type': { marginTop: 0 },
+                    '& p:last-of-type': { marginBottom: 0 },
+                    '& ul, & ol': { margin: '0.5em 0', paddingLeft: '1.5em' },
+                    '& table': {
+                      borderCollapse: 'collapse',
+                      width: '100%',
+                      margin: '0.75em 0',
+                      fontSize: '0.875em',
+                      display: 'table',
+                      overflowX: 'auto',
+                    },
+                    '& th, & td': {
+                      border: '1px solid #ddd',
+                      padding: '8px 12px',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                    },
+                    '& th': {
+                      backgroundColor: '#e3f2fd',
+                      fontWeight: 'bold',
+                      color: '#1565c0',
+                      borderBottom: '2px solid #1976d2',
+                    },
+                    '& tbody tr:nth-of-type(even)': {
+                      backgroundColor: '#f9f9f9',
+                    },
+                    '& tbody tr:hover': {
+                      backgroundColor: '#f5f5f5',
+                    },
+                    '& code': {
+                      backgroundColor: '#f5f5f5',
+                      padding: '2px 4px',
+                      borderRadius: '3px',
+                      fontSize: '0.875em',
+                    },
+                    '& pre': {
+                      backgroundColor: '#f5f5f5',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      overflow: 'auto',
+                    },
+                    '& strong': {
+                      fontWeight: 'bold',
+                    },
+                    // Table container for horizontal scroll
+                    '& > :has(table)': {
+                      overflowX: 'auto',
+                      maxWidth: '100%',
+                    },
+                  }}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {message.content}
+                  </ReactMarkdown>
+                </Box>
+              )
             )}
 
             {/* Timestamp */}

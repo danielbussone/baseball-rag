@@ -166,21 +166,41 @@ export class ChatService {
       let toolCalls: any[] = [];
 
       // First stream: get initial response with potential tool calls
+      let buffer = '';
+      let lastSendTime = Date.now();
+      let chunkCount = 0;
+      
       for await (const chunk of this.ollama.chatStream(messages, toolDefinitions)) {
         if (chunk.message?.content) {
-          const newContent = chunk.message.content.slice(accumulatedContent.length);
-          accumulatedContent = chunk.message.content;
+          // Ollama sends individual tokens, not cumulative content
+          const newContent = chunk.message.content;
+          accumulatedContent += newContent;
+          buffer += newContent;
 
-          if (newContent) {
-            yield { type: 'content', content: newContent };
+          const now = Date.now();
+          // Send buffered content every 50ms or when we have enough content
+          if (now - lastSendTime >= 50 || buffer.length >= 20) {
+            if (buffer) {
+              yield { type: 'content', content: buffer };
+              buffer = '';
+              lastSendTime = now;
+            }
           }
         }
 
         // Capture tool calls whenever they appear
         if (chunk.message?.tool_calls) {
           toolCalls = chunk.message.tool_calls;
-          logger.debug({ toolCount: toolCalls.length }, 'Tool calls detected in stream chunk');
         }
+      }
+
+      // Send any remaining buffered content
+      if (buffer) {
+        logger.info({
+          finalBufferContent: buffer.substring(0, 100),
+          finalBufferLength: buffer.length
+        }, 'Sending final buffered content');
+        yield { type: 'content', content: buffer };
       }
 
       logger.debug({ toolCallsFound: toolCalls.length, contentLength: accumulatedContent.length }, 'Stream completed');
@@ -251,15 +271,32 @@ export class ChatService {
 
         // Stream final response with tool results
         accumulatedContent = '';
+        buffer = '';
+        lastSendTime = Date.now();
+        chunkCount = 0;
+        
         for await (const chunk of this.ollama.chatStream(messages)) {
           if (chunk.message?.content) {
-            const newContent = chunk.message.content.slice(accumulatedContent.length);
-            accumulatedContent = chunk.message.content;
+            // Ollama sends individual tokens, not cumulative content
+            const newContent = chunk.message.content;
+            accumulatedContent += newContent;
+            buffer += newContent;
 
-            if (newContent) {
-              yield { type: 'content', content: newContent };
+            const now = Date.now();
+            // Send buffered content every 50ms or when we have enough content
+            if (now - lastSendTime >= 50 || buffer.length >= 20) {
+              if (buffer) {
+                yield { type: 'content', content: buffer };
+                buffer = '';
+                lastSendTime = now;
+              }
             }
           }
+        }
+
+        // Send any remaining buffered content
+        if (buffer) {
+          yield { type: 'content', content: buffer };
         }
       }
 

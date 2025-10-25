@@ -16,7 +16,8 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const contentBufferRef = useRef<string>('');
-  const updateIntervalRef = useRef<number | null>(null);
+
+
 
   /**
    * Scrolls the chat to the bottom when new messages arrive
@@ -62,33 +63,21 @@ export default function Chat() {
     // Reset buffer
     contentBufferRef.current = '';
 
-    // Clear any existing interval
-    if (updateIntervalRef.current) {
-      clearInterval(updateIntervalRef.current);
-    }
-
-    // Start interval to update UI periodically with buffered content
-    updateIntervalRef.current = window.setInterval(() => {
-      const currentContent = contentBufferRef.current;
-      setMessages((prev) => {
-        const updated = [...prev];
-        const index = updated.findIndex((m) => m.id === assistantMessageId);
-        if (index !== -1 && updated[index].content !== currentContent) {
-          updated[index] = {
-            ...updated[index],
-            content: currentContent,
-          };
-        }
-        return updated;
-      });
-    }, 50); // Update UI every 50ms
-
     try {
       await sendChatMessageStream(message, {
         onContent: (content) => {
-          console.log('[Stream] Content chunk:', content.length, 'chars');
-          // Just accumulate in buffer, interval will handle UI updates
           contentBufferRef.current += content;
+          setMessages((prev) => {
+            const updated = [...prev];
+            const index = updated.findIndex((m) => m.id === assistantMessageId);
+            if (index !== -1) {
+              updated[index] = {
+                ...updated[index],
+                content: contentBufferRef.current,
+              };
+            }
+            return updated;
+          });
         },
         onToolStart: (toolExecution: ToolExecution) => {
           console.log('[Stream] Tool start:', toolExecution.name);
@@ -126,37 +115,20 @@ export default function Chat() {
         },
         onDone: () => {
           console.log('[Stream] Done');
-
-          // Clear interval
-          if (updateIntervalRef.current) {
-            clearInterval(updateIntervalRef.current);
-            updateIntervalRef.current = null;
-          }
-
-          // Final update with all buffered content
           setMessages((prev) => {
             const updated = [...prev];
             const index = updated.findIndex((m) => m.id === assistantMessageId);
             if (index !== -1) {
               updated[index] = {
                 ...updated[index],
-                content: contentBufferRef.current,
                 isLoading: false,
               };
             }
             return updated;
           });
-
-          contentBufferRef.current = '';
           setIsLoading(false);
         },
         onError: (error: string) => {
-          // Clear interval
-          if (updateIntervalRef.current) {
-            clearInterval(updateIntervalRef.current);
-            updateIntervalRef.current = null;
-          }
-
           setMessages((prev) => {
             const updated = [...prev];
             const index = updated.findIndex((m) => m.id === assistantMessageId);
@@ -170,18 +142,10 @@ export default function Chat() {
             }
             return updated;
           });
-
-          contentBufferRef.current = '';
           setIsLoading(false);
         },
       });
     } catch (error) {
-      // Clear interval
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-        updateIntervalRef.current = null;
-      }
-
       setMessages((prev) => {
         const updated = [...prev];
         const index = updated.findIndex((m) => m.id === assistantMessageId);
@@ -195,8 +159,6 @@ export default function Chat() {
         }
         return updated;
       });
-
-      contentBufferRef.current = '';
       setIsLoading(false);
     }
   };
