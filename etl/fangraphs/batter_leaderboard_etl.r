@@ -32,9 +32,6 @@ START_YEAR <- 1988
 END_YEAR <- 2025
 NUM_YEARS = END_YEAR - START_YEAR
 
-# Minimum plate appearances for inclusion
-MIN_PA <- 50
-
 # ============================================================================
 # DATABASE CONNECTION
 # ============================================================================
@@ -56,24 +53,44 @@ cat("Connected successfully!\n\n")
 # ============================================================================
 
 cat("Fetching FanGraphs batter leaderboard data...\n")
-cat(sprintf("Years: %d-%d, Min PA: %d\n\n", START_YEAR, END_YEAR, MIN_PA))
+cat(sprintf("Years: %d-%d\n\n", START_YEAR, END_YEAR))
 
 # FG doesn't seems to like pulling multiple years at once, so we will loop
 # Pull data beginning with START_YEAR
-cat(sprintf("Getting Year: %d, Min PA: %d\n\n", START_YEAR, MIN_PA))
-fg_data <- fg_batter_leaders(startseason = START_YEAR, endseason = START_YEAR, qual = MIN_PA)
+cat(sprintf("Getting Year: %d\n\n", START_YEAR))
+fg_batter_data <- fg_batter_leaders(startseason = START_YEAR, endseason = START_YEAR)
+
+fg_pitcher_data <- fg_pitcher_leaders(startseason = START_YEAR, endseason = START_YEAR)
+
+fg_fielder_data <- fg_fielder_leaders(startseason = START_YEAR, endseason = START_YEAR)
 
 
 # Pull individual season leaderboards and bind to the data frame
 for (i in 1:NUM_YEARS) {
   year <- START_YEAR + i
-  cat(sprintf("Getting Year: %d, Min PA: %d\n\n", year, MIN_PA))
-  fg_year <- fg_batter_leaders(startseason = year, endseason = year, qual = MIN_PA)
-  fg_data <- rbind(fg_data, fg_year, fill=TRUE)
+  cat(sprintf("\nGetting Year: %d\n", year))
+  
+  cat(sprintf("Getting Batting Leaders\n"))
+  fg_batter_year <- fg_batter_leaders(startseason = year, endseason = year)
+  fg_batter_data <- rbind(fg_batter_data, fg_batter_year, fill=TRUE)
+  
+  cat(sprintf("Getting Pitching Leaders\n"))
+  fg_pitcher_year <- fg_pitcher_leaders(startseason = year, endseason = year)
+  fg_pitcher_data <- rbind(fg_pitcher_data, fg_pitcher_year, fill=TRUE)
+  
+  cat(sprintf("Getting Fielding Leaders\n"))
+  fg_fielder_year <- fg_fielder_leaders(startseason = year, endseason = year)
+  fg_fielder_data <- rbind(fg_fielder_data, fg_fielder_year, fill=TRUE)
 }
 
-cat(sprintf("Retrieved %d player-seasons\n", nrow(fg_data)))
-cat(sprintf("Columns: %d\n\n", ncol(fg_data)))
+cat(sprintf("Retrieved %d player-batter-seasons\n", nrow(fg_batter_data)))
+cat(sprintf("Columns: %d\n\n", ncol(fg_batter_data)))
+
+cat(sprintf("Retrieved %d player-pitcher-seasons\n", nrow(fg_pitcher_data)))
+cat(sprintf("Columns: %d\n\n", ncol(fg_pitcher_data)))
+
+cat(sprintf("Retrieved %d player-fielder-seasons\n", nrow(fg_fielder_data)))
+cat(sprintf("Columns: %d\n\n", ncol(fg_fielder_data)))
 
 # Show sample
 cat("Sample of data:\n")

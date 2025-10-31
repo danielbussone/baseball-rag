@@ -1,103 +1,339 @@
-# LLM Tools
+# Backend API Server
 
-## Compare Players
+TypeScript/Node.js backend that orchestrates LLM interactions, database queries, and tool execution for the Baseball RAG system.
 
-### Input
+## Overview
+
+- **Framework**: Fastify with TypeScript
+- **LLM Integration**: Ollama REST API with function calling
+- **Database**: PostgreSQL with connection pooling
+- **Features**: Real-time streaming responses, structured logging, tool execution
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your database credentials
+
+# Development mode (with hot reload)
+npm run dev
+
+# Production mode
+npm start
+
+# Build TypeScript
+npm run build
 ```
+
+## API Endpoints
+
+### POST `/api/chat/stream`
+Streaming chat endpoint with real-time LLM responses.
+
+**Request:**
+```json
 {
-    "message": "Compare the careers of Mike Trout and Ken Griffey Jr."
+  "message": "Compare Mike Trout and Ken Griffey Jr's careers"
 }
 ```
 
-### Output
-Mike Trout and Ken Griffey Jr. are two of the most iconic players in baseball history, known for their incredible talent and dominance on the field.
-
-**Career Comparison:**
-
-*   **Games Played:** Mike Trout (15 seasons) vs. Ken Griffey Jr. (22 seasons)
-*   **PA:** Mike Trout (7,203 PA) vs. Ken Griffey Jr. (11,304 PA)
-*   **HR:** Ken Griffey Jr. (630 HR) vs. Mike Trout (404 HR)
-*   **SB:** Mike Trout (214 SB) vs. Ken Griffey Jr. (184 SB)
-*   **WAR:** Mike Trout (86.99 WAR) vs. Ken Griffey Jr. (77.5 WAR)
-*   **WRC+:** Mike Trout (160.2 WRC+) vs. Ken Griffey Jr. (125.0 WRC+)
-
-**Peak Comparison:**
-
-*   **WAR:** Mike Trout (10.1 WAR) vs. Ken Griffey Jr. (9.7 WAR)
-*   **HR:** Mike Trout's peak season was 2013, when he hit 45 HRs, compared to Ken Griffey Jr.'s peak of 56 HRs in 1996.
-*   **WRC+:** Mike Trout's peak WRC+ was 160.2 in 2013, while Ken Griffey Jr.'s peak WRC+ was 158.5 in 1996.
-
-**Longevity Comparison:**
-
-*   **Seasons Played:** Ken Griffey Jr. played for 22 seasons, compared to Mike Trout's 15 seasons.
-*   **Awards and Accolades:** Both players won multiple awards, including MVPs and Gold Gloves, but Ken Griffey Jr.'s career was marked by a longer period of dominance.
-
-**Conclusion:**
-
-While both players are widely regarded as all-time greats, their careers have some notable differences. Mike Trout has had an incredibly dominant peak, with several seasons leading the league in multiple categories. He has also shown remarkable longevity and durability, playing at an elite level for over 15 seasons. Ken Griffey Jr., on the other hand, had a longer career overall but his peak was slightly shorter-lived. Both players are deserving of their places among baseball's all-time greats.
-
-In terms of advanced metrics, Mike Trout has a slight edge in WAR and WRC+ due to his incredible all-around skills, while Ken Griffey Jr. excelled primarily as a hitter with exceptional power.
-
---------------------------------------------------------------------------------------------------------
-
-## Player Characteristics Search
-
-### Input
+**Response:** Server-Sent Events stream
 ```
+data: {"type": "content", "content": "Mike Trout and Ken Griffey Jr..."}
+data: {"type": "tool_start", "tool": "compare_players", "args": {...}}
+data: {"type": "tool_end", "tool": "compare_players", "duration": 234}
+data: {"type": "content", "content": "Based on the data..."}
+data: {"type": "done"}
+```
+
+### GET `/api/health`
+Health check endpoint.
+
+**Response:**
+```json
 {
-    "message": "Who are some elite slugging first baseman from 2015-2020?"
+  "status": "healthy",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "database": "connected",
+  "ollama": "available"
 }
 ```
 
-### Output
-Based on the search results, here are some elite slugging first baseman from 2015-2020:
+## LLM Tools
 
-* José Abreu (CHW) - 36 home runs, .581 slugging percentage, 167 wRC+
-* Miguel Cabrera (DET) - 30 home runs, .586 slugging percentage, 177 wRC+ (note: primarily a third baseman)
-* Nelson Cruz (SEA) - 38 home runs, .562 slugging percentage, 153 wRC+ (note: played some first base in 2015 and 2016)
+The system provides specialized tools that the LLM can call to retrieve baseball data:
 
-These players are all above the elite grade threshold of 80.
+### `search_similar_players`
+Hybrid semantic + SQL search for players matching a description.
 
---------------------------------------------------------------------------------------------------------
+**Parameters:**
+- `query` (string) - Natural language description
+- `filters` (object) - Optional SQL filters
+  - `position` - Position filter ("1B", "SS", "OF", etc.)
+  - `minPowerGrade` / `maxPowerGrade` - Power grade range (20-80)
+  - `minHitGrade` / `maxHitGrade` - Contact grade range
+  - `minFieldingGrade` / `maxFieldingGrade` - Defense grade range
+  - `startYear` / `endYear` - Year range
+  - `limit` - Number of results (default: 10)
 
-## Player Summary
-
-### Input
-```
+**Example:**
+```json
 {
-    "message": "Tell me about Mookie Betts"
+  "query": "elite power hitter with defensive issues",
+  "filters": {
+    "minPowerGrade": 70,
+    "maxFieldingGrade": 40,
+    "startYear": 2015
+  }
 }
 ```
 
-Mookie Betts is an elite all-around player who has consistently performed at a high level throughout his career. He has established himself as one of the best players in baseball, with a strong combination of power, speed, and plate discipline.
+### `get_player_stats`
+Retrieve specific season statistics for a player.
 
-Betts's most notable asset is his ability to hit for average and get on base at a high rate (Career .326 OBP). He also possesses above-average raw power, hitting 291 home runs over his career. His speed is another area where he excels, with 196 stolen bases in just 1531 games.
+**Parameters:**
+- `playerName` (string) - Player name
+- `year` (number) - Season year
 
-On the defensive side of things, Betts has received high grades for his outfield play and baserunning skills. He has been an excellent defender at all three positions (left field, center field, right field) and is known for his ability to make highlight-reel plays with his glove and arm.
+### `compare_players`
+Side-by-side comparison of two players' careers.
 
-Betts's overall grade is 55, indicating that he is among the best players in baseball, but not necessarily a generational talent. He has consistently performed above average at all positions he have played and has been an All-Star multiple times.
+**Parameters:**
+- `player1` (string) - First player name
+- `player2` (string) - Second player name
 
---------------------------------------------------------------------------------------------------------
+### `get_career_summary`
+Career aggregation and highlights for a player.
 
-## Player Season Stats
+**Parameters:**
+- `playerName` (string) - Player name
 
-### Input
+## Architecture
+
+### Project Structure
 ```
-{
-    "message": "Tell me about Andrelton Simmons' fielding stats from 2014"
-}
+src/
+├── config/          # Environment and logger configuration
+├── services/        # Core business logic
+│   ├── chat.ts      # LLM orchestration and streaming
+│   ├── ollama.ts    # Ollama API client
+│   ├── database.ts  # PostgreSQL connection pool
+│   └── embedding.ts # Embedding generation service
+├── tools/           # LLM tool implementations
+│   ├── definitions.ts   # Tool schemas for Ollama
+│   ├── search.ts       # Semantic search tool
+│   ├── player-stats.ts # Player statistics tools
+│   └── compare.ts      # Player comparison tool
+├── types/           # TypeScript interfaces
+└── index.ts         # Server entry point
 ```
 
-### Output
-Andrelton Simmons' fielding stats from 2014 were:
+### Key Services
 
-* Position: SS
-* Games: 146
-* Putouts: 244 ( Defense: 19.7)
-* Assists: 338 (Fielding Grade: 70)
-* Errors: 12
-* Fielding Percentage: .969
+**Chat Service** (`services/chat.ts`)
+- Orchestrates LLM conversations with tool calling
+- Handles streaming responses with Server-Sent Events
+- Manages tool execution between streaming phases
+- Implements dual streaming loops (pre-tools + post-tools)
 
-His defense was considered excellent, earning him a fielding grade of 70. He committed only 12 errors in 146 games, showcasing his high level of skill and awareness on the field.
+**Ollama Service** (`services/ollama.ts`)
+- REST API client for local Ollama instance
+- Handles model selection and parameter tuning
+- Processes streaming responses and tool calls
+- Error handling and retry logic
 
-Note that the Fangraphs grades are based on the system used at the time of data collection (2014), which might be slightly different from the one used today.
+**Database Service** (`services/database.ts`)
+- PostgreSQL connection pooling with `pg`
+- Query builders for complex baseball statistics
+- Transaction management for data consistency
+- Connection health monitoring
+
+## Configuration
+
+### Environment Variables
+```bash
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=your_password
+
+# Ollama
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=llama3.2
+
+# Server
+PORT=3001
+NODE_ENV=development
+
+# Logging
+LOG_LEVEL=info
+LOG_PRETTY=true  # Pretty print in development
+```
+
+### Ollama Model Requirements
+- **Function calling support** - Required for tool execution
+- **Recommended models**: `llama3.2`, `qwen2.5:14b`, `mistral-nemo`
+- **Minimum context**: 8K tokens for complex queries
+- **Temperature**: 0.1 for consistent, factual responses
+
+## Logging
+
+Structured JSON logging with Pino:
+
+```typescript
+// Request tracing
+logger.info({ requestId, method, url, duration }, 'Request completed');
+
+// Tool execution
+logger.info({ tool: 'search_similar_players', args, duration }, 'Tool executed');
+
+// Database queries
+logger.debug({ query, params, rows }, 'Database query');
+
+// Errors with context
+logger.error({ err, requestId, tool }, 'Tool execution failed');
+```
+
+**Log Levels:**
+- `debug` - Detailed execution flow, SQL queries
+- `info` - Important events (requests, tool calls, startup)
+- `warn` - Unexpected but handled situations
+- `error` - Failures requiring attention
+
+## Streaming Implementation
+
+### Dual Streaming Architecture
+1. **Initial Stream**: LLM generates response, identifies needed tools
+2. **Tool Execution**: Execute tools, send progress events
+3. **Final Stream**: LLM incorporates tool results into final response
+
+### Event Types
+```typescript
+type StreamEvent = 
+  | { type: 'content', content: string }
+  | { type: 'tool_start', tool: string, args: any }
+  | { type: 'tool_end', tool: string, duration: number, success: boolean }
+  | { type: 'error', error: string }
+  | { type: 'done' };
+```
+
+### Buffer Management
+- **Token buffering**: 50ms intervals or 20+ characters
+- **Coherent chunks**: Avoid mid-word breaks
+- **Tool boundaries**: Clean separation between content and tool execution
+
+## Performance
+
+### Response Times
+- **Simple queries**: 1-2 seconds
+- **Complex queries with tools**: 3-5 seconds
+- **Database queries**: 50-200ms
+- **LLM generation**: 1-3 seconds (depends on model/hardware)
+
+### Optimization
+- **Connection pooling**: Reuse database connections
+- **Query optimization**: Indexed searches, efficient joins
+- **Streaming**: Immediate user feedback, perceived performance
+- **Caching**: Tool results cached for identical queries
+
+## Development
+
+### Adding New Tools
+1. **Define schema** in `tools/definitions.ts`
+2. **Implement logic** in appropriate tool file
+3. **Add to executor** in `tools/index.ts`
+4. **Test with LLM** using example queries
+
+### Testing
+```bash
+# Unit tests
+npm test
+
+# Integration tests with database
+npm run test:integration
+
+# Manual testing with curl
+curl -X POST http://localhost:3001/api/chat/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Tell me about Mike Trout"}'
+```
+
+### Debugging
+```bash
+# Enable debug logging
+LOG_LEVEL=debug npm run dev
+
+# Test specific tools
+node -e "require('./dist/tools/search.js').searchSimilarPlayers('power hitter')"
+
+# Database connection test
+node -e "require('./dist/services/database.js').testConnection()"
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Ollama Connection Failed**
+```
+Error: connect ECONNREFUSED 127.0.0.1:11434
+```
+- Ensure Ollama is running: `ollama serve`
+- Check model is available: `ollama list`
+- Verify OLLAMA_HOST in .env
+
+**Database Connection Error**
+```
+Error: password authentication failed
+```
+- Check DB_PASSWORD in .env
+- Verify PostgreSQL is running: `docker ps`
+- Test connection: `psql -h localhost -U postgres`
+
+**Tool Execution Timeout**
+```
+Warning: Tool execution took longer than expected
+```
+- Check database query performance
+- Verify embedding service is responsive
+- Consider increasing timeout limits
+
+**Streaming Issues**
+```
+Error: Cannot set headers after they are sent
+```
+- Ensure proper error handling in streaming loops
+- Check for multiple response writes
+- Verify client connection handling
+
+### Performance Issues
+
+**Slow Database Queries**
+- Check query execution plans: `EXPLAIN ANALYZE`
+- Verify indexes are being used
+- Consider query optimization or caching
+
+**High Memory Usage**
+- Monitor connection pool size
+- Check for memory leaks in streaming
+- Consider garbage collection tuning
+
+**LLM Response Quality**
+- Adjust temperature and top_p parameters
+- Improve system prompts and examples
+- Consider different model selection
+
+## Future Enhancements
+
+- **Caching layer** - Redis for tool results and embeddings
+- **Rate limiting** - Protect against abuse
+- **Authentication** - User management and API keys
+- **Metrics** - Prometheus/Grafana monitoring
+- **WebSocket support** - Alternative to Server-Sent Events
+- **Batch processing** - Handle multiple queries efficiently
