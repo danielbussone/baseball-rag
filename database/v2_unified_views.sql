@@ -112,89 +112,6 @@ WHERE COALESCE(fg.season, lb.year_id) IS NOT null;
 COMMENT ON VIEW batting_seasons_unified IS 'Unified batting seasons combining FanGraphs advanced metrics with Lahman biographical data';
 
 -- ============================================================================
--- CAREER STATS UNIFIED VIEW
--- ============================================================================
-
-CREATE OR REPLACE VIEW career_stats_unified AS
-WITH batting_careers AS (
-    SELECT
-        player_id,
-        SUM(games) AS career_batting_games,
-        SUM(plate_appearances) AS career_pa,
-        SUM(hits) AS career_hits,
-        SUM(home_runs) AS career_hr,
-        ROUND(SUM(hits)::numeric / NULLIF(SUM(at_bats), 0), 3) AS career_avg,
-        ROUND(SUM(war), 1) AS career_batting_war,
-        MAX(war) AS peak_batting_war
-    FROM batting_seasons_unified
-    GROUP BY player_id
-),
-     pitching_careers AS (
-         SELECT
-             player_id,
-             SUM(games) AS career_pitching_games,
-             SUM(innings_pitched) AS career_ip,
-             SUM(wins) AS career_wins,
-             SUM(strikeouts) AS career_strikeouts,
-             ROUND(SUM(war), 1) AS career_pitching_war,
-             MAX(war) AS peak_pitching_war
-         FROM pitching_seasons_unified
-         GROUP BY player_id
-     ),
-     fielding_careers AS (
-         SELECT
-             player_id,
-             COUNT(DISTINCT position) AS positions_played,
-             STRING_AGG(DISTINCT position, ', ' ORDER BY position) AS positions_list,
-             ROUND(AVG(total_defense), 1) AS avg_defensive_value,
-             SUM(CASE WHEN position = 'P' THEN innings ELSE 0 END) AS pitcher_innings,
-             SUM(CASE WHEN position != 'P' THEN innings ELSE 0 END) AS position_innings
-         FROM fielding_seasons_unified
-         WHERE total_defense IS NOT NULL
-         GROUP BY player_id
-     )
-SELECT
-    pm.player_id,
-    pm.name_first || ' ' || pm.name_last AS player_name,
-    pm.birth_year,
-    pm.debut_date,
-    pm.final_game_date,
-    pm.bats,
-    pm.throws,
-
-    -- Career totals
-    bc.career_batting_games,
-    bc.career_pa,
-    bc.career_hits,
-    bc.career_hr,
-    bc.career_avg,
-    bc.career_batting_war,
-    bc.peak_batting_war,
-
-    pc.career_pitching_games,
-    pc.career_ip,
-    pc.career_wins,
-    pc.career_strikeouts,
-    pc.career_pitching_war,
-    pc.peak_pitching_war,
-
-    fc.positions_played,
-    fc.positions_list,
-    fc.avg_defensive_value,
-    fc.pitcher_innings,
-    fc.position_innings,
-
-    -- Overall value
-    ROUND(COALESCE(bc.career_batting_war, 0) + COALESCE(pc.career_pitching_war, 0), 1) AS career_total_war
-
-FROM players_master pm
-         LEFT JOIN batting_careers bc ON pm.player_id = bc.player_id
-         LEFT JOIN pitching_careers pc ON pm.player_id = pc.player_id
-         LEFT JOIN fielding_careers fc ON pm.player_id = fc.player_id
-WHERE (bc.player_id IS NOT NULL OR pc.player_id IS NOT null)
-order by career_total_war desc;
-
--- ============================================================================
 -- UNIFIED PITCHING SEASONS VIEW
 -- ============================================================================
 
@@ -411,3 +328,130 @@ FROM players_master pm
 WHERE COALESCE(fg.season, lf.year_id) IS NOT null;
 
 COMMENT ON VIEW fielding_seasons_unified IS 'Unified fielding seasons combining FanGraphs advanced metrics with Lahman biographical data';
+
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_career_stats_unified_player_id ON career_stats_unified(player_id);
+CREATE INDEX IF NOT EXISTS idx_career_stats_unified_total_jaws ON career_stats_unified(total_jaws DESC);
+
+-- ============================================================================
+-- CAREER STATS UNIFIED VIEW
+-- ============================================================================
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS career_stats_unified AS
+WITH batting_careers AS (
+    SELECT
+        player_id,
+        SUM(games) AS career_batting_games,
+        SUM(plate_appearances) AS career_pa,
+        SUM(hits) AS career_hits,
+        SUM(home_runs) AS career_hr,
+        ROUND(SUM(hits)::numeric / NULLIF(SUM(at_bats), 0), 3) AS career_avg,
+        ROUND(SUM(war), 1) AS career_batting_war,
+        MAX(war) AS peak_batting_war,
+        ROUND((
+            SELECT SUM(war)
+            FROM (
+                SELECT war
+                FROM batting_seasons_unified b2
+                WHERE b2.player_id = b1.player_id
+                ORDER BY war DESC
+                LIMIT 7
+            ) top_seasons
+        ), 1) AS seven_year_peak_batting_war
+    FROM batting_seasons_unified b1
+    GROUP BY player_id
+),
+     pitching_careers AS (
+         SELECT
+             player_id,
+             SUM(games) AS career_pitching_games,
+             SUM(innings_pitched) AS career_ip,
+             SUM(wins) AS career_wins,
+             SUM(strikeouts) AS career_strikeouts,
+             ROUND(SUM(war), 1) AS career_pitching_war,
+             MAX(war) AS peak_pitching_war,
+             ROUND((
+                 SELECT SUM(war)
+                 FROM (
+                     SELECT war
+                     FROM pitching_seasons_unified p2
+                     WHERE p2.player_id = p1.player_id
+                     ORDER BY war DESC
+                     LIMIT 7
+                 ) top_seasons
+             ), 1) AS seven_year_peak_pitching_war
+         FROM pitching_seasons_unified p1
+         GROUP BY player_id
+     ),
+     fielding_careers AS (
+         SELECT
+             player_id,
+             COUNT(DISTINCT position) AS positions_played,
+             STRING_AGG(DISTINCT position, ', ' ORDER BY position) AS positions_list,
+             ROUND(AVG(total_defense), 1) AS avg_defensive_value,
+             SUM(CASE WHEN position = 'P' THEN innings ELSE 0 END) AS pitcher_innings,
+             SUM(CASE WHEN position != 'P' THEN innings ELSE 0 END) AS position_innings
+         FROM fielding_seasons_unified
+         WHERE total_defense IS NOT NULL
+         GROUP BY player_id
+     )
+SELECT
+    pm.player_id,
+    pm.name_first || ' ' || pm.name_last AS player_name,
+    pm.birth_year,
+    pm.debut_date,
+    pm.final_game_date,
+    pm.bats,
+    pm.throws,
+
+    -- Career totals
+    bc.career_batting_games,
+    bc.career_pa,
+    bc.career_hits,
+    bc.career_hr,
+    bc.career_avg,
+    bc.career_batting_war,
+    bc.peak_batting_war,
+
+    pc.career_pitching_games,
+    pc.career_ip,
+    pc.career_wins,
+    pc.career_strikeouts,
+    pc.career_pitching_war,
+    pc.peak_pitching_war,
+
+    fc.positions_played,
+    fc.positions_list,
+    fc.avg_defensive_value,
+    fc.pitcher_innings,
+    fc.position_innings,
+
+    -- Overall value
+    ROUND(COALESCE(bc.career_batting_war, 0) + COALESCE(pc.career_pitching_war, 0), 1) AS career_total_war,
+    
+    -- JAWS calculations
+    bc.seven_year_peak_batting_war,
+    pc.seven_year_peak_pitching_war,
+    ROUND(COALESCE(bc.seven_year_peak_batting_war, 0) + COALESCE(pc.seven_year_peak_pitching_war, 0), 1) AS seven_year_peak_total_war,
+    ROUND((COALESCE(bc.career_batting_war, 0) + COALESCE(bc.seven_year_peak_batting_war, 0)) / 2.0, 1) AS batting_jaws,
+    ROUND((COALESCE(pc.career_pitching_war, 0) + COALESCE(pc.seven_year_peak_pitching_war, 0)) / 2.0, 1) AS pitching_jaws,
+    ROUND((
+        COALESCE(bc.career_batting_war, 0) + COALESCE(pc.career_pitching_war, 0) +
+        COALESCE(bc.seven_year_peak_batting_war, 0) + COALESCE(pc.seven_year_peak_pitching_war, 0)
+    ) / 2.0, 1) AS total_jaws
+
+FROM players_master pm
+         LEFT JOIN batting_careers bc ON pm.player_id = bc.player_id
+         LEFT JOIN pitching_careers pc ON pm.player_id = pc.player_id
+         LEFT JOIN fielding_careers fc ON pm.player_id = fc.player_id
+WHERE (bc.player_id IS NOT NULL OR pc.player_id IS NOT null)
+order by career_total_war desc;
+
+-- Refresh function
+CREATE OR REPLACE FUNCTION refresh_career_stats() RETURNS void AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW career_stats_unified;
+END;
+$$ LANGUAGE plpgsql;
+
+COMMENT ON MATERIALIZED VIEW career_stats_unified IS 'Materialized view of career statistics with JAWS calculations - refresh after data updates';
